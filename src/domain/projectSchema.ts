@@ -1,0 +1,90 @@
+import { z } from 'zod'
+
+const switchRoleSchema = z.enum(['spine', 'leaf', 'border', 'standalone'])
+const linkKindSchema = z.enum(['underlay-p2p', 'vsx-isl', 'vsx-keepalive', 'mgmt', 'unassigned'])
+
+const switchInstanceSchema = z.object({
+  id: z.string(),
+  catalogId: z.string(),
+  name: z.string(),
+  role: switchRoleSchema,
+  sequence: z.number(),
+  vsxGroupId: z.string().optional(),
+  position: z.object({ x: z.number(), y: z.number() }),
+  managementIp: z.string().optional(),
+  managementGateway: z.string().optional(),
+  asnOverride: z.number().optional(),
+  loopbackOverride: z.string().optional(),
+})
+
+const portRefSchema = z.object({ switchInstanceId: z.string(), portName: z.string() })
+
+const linkSchema = z.object({
+  id: z.string(),
+  a: portRefSchema,
+  b: portRefSchema,
+  kind: linkKindSchema,
+  ipOverride: z
+    .object({ aIp: z.string(), bIp: z.string(), prefixLen: z.union([z.literal(31), z.literal(30)]) })
+    .optional(),
+})
+
+const vlanMappingSchema = z.object({
+  id: z.string(),
+  vlanId: z.number(),
+  name: z.string(),
+  vniOverride: z.number().optional(),
+  vrfId: z.string().optional(),
+  subnetOverride: z.string().optional(),
+  activeGatewayMacOverride: z.string().optional(),
+  presentOn: z.array(z.string()).optional(),
+})
+
+const tenantVrfSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  l3VniOverride: z.number().optional(),
+  routeDistinguisherOverride: z.string().optional(),
+  importRouteTargets: z.array(z.string()).optional(),
+  exportRouteTargets: z.array(z.string()).optional(),
+})
+
+const ipPoolSchema = z.object({ supernet: z.string(), description: z.string().optional() })
+
+const projectSettingsSchema = z.object({
+  fabricMode: z.enum(['static-vxlan', 'evpn']),
+  underlayProtocol: z.enum(['ebgp', 'ospf']),
+  asnScheme: z.enum(['per-device-unique', 'shared-leaf-asn']),
+  baseAsn: z.number(),
+  ospfProcessId: z.number().optional(),
+  ospfArea: z.string().optional(),
+  pools: z.object({
+    underlayP2P: ipPoolSchema,
+    loopback: ipPoolSchema,
+    vsxKeepalive: ipPoolSchema,
+    mgmt: ipPoolSchema,
+    tenantSubnets: ipPoolSchema,
+  }),
+  tenantSubnetPrefixLen: z.number(),
+  vniAllocation: z.object({
+    l2VniStrategy: z.enum(['vlan-plus-offset', 'explicit-pool']),
+    l2VniOffset: z.number(),
+    l3VniPoolStart: z.number(),
+  }),
+  routeTargetAsn: z.number().optional(),
+  jumboMtu: z.boolean(),
+})
+
+export const projectSchema = z.object({
+  formatVersion: z.literal(1),
+  projectName: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  settings: projectSettingsSchema,
+  switches: z.array(switchInstanceSchema),
+  links: z.array(linkSchema),
+  vlans: z.array(vlanMappingSchema),
+  vrfs: z.array(tenantVrfSchema),
+})
+
+export type ProjectSchemaType = z.infer<typeof projectSchema>
