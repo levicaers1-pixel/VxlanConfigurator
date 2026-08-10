@@ -1,6 +1,6 @@
 import type { SwitchInstance, SwitchRole } from '../domain/types'
 
-const ROW_ORDER: SwitchRole[] = ['spine', 'border', 'leaf', 'standalone']
+const ROW_ORDER: SwitchRole[] = ['spine', 'border', 'leaf', 'access', 'standalone']
 const ROW_HEIGHT = 220
 const COLUMN_WIDTH = 220
 const CENTER_X = 400

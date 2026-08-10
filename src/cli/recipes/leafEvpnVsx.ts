@@ -9,6 +9,7 @@ import { underlayOspf } from '../sections/underlayOspf'
 import { underlayBgp } from '../sections/underlayBgp'
 import { overlayEvpnBgp } from '../sections/overlayEvpnBgp'
 import { overlayEvpn } from '../sections/overlayEvpn'
+import { evpnVlans } from '../sections/evpnVlans'
 
 export const leafEvpnVsx: SectionBuilder[] = [
   hostname,
@@ -17,6 +18,7 @@ export const leafEvpnVsx: SectionBuilder[] = [
   vsx,
   vlansAndSvis,
   vrfs,
+  evpnVlans,
   underlayOspf,
   underlayBgp,
   overlayEvpnBgp,

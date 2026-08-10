@@ -18,7 +18,7 @@ export const overlayStaticVxlan: SectionBuilder = (ctx, out) => {
 
   out.block('interface vxlan 1', (b) => {
     b.line('no shutdown')
-    b.line(`source-ip ${ownLoopback}`)
+    b.line(`source ip ${ownLoopback}`)
     b.comment('Static mode: no BGP EVPN — remote VTEP peers below are derived from topology, not learned dynamically.')
 
     for (const vlan of selfVlans) {
@@ -39,7 +39,7 @@ export const overlayStaticVxlan: SectionBuilder = (ctx, out) => {
           const remoteLoopback = ctx.ipPlan.loopbacks[remote.id]
           if (!remoteLoopback || seen.has(remoteLoopback)) continue
           seen.add(remoteLoopback)
-          vb.line(`remote-vtep ${remoteLoopback}`)
+          vb.line(`vtep-peer ${remoteLoopback}`)
         }
         if (seen.size === 0) {
           vb.comment('No remote VTEP peers found for this VLAN — single-site/no-flood-list topology, or VLAN not present elsewhere.')

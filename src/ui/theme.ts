@@ -4,6 +4,7 @@ export const ROLE_COLOR: Record<SwitchRole, { bg: string; border: string; text: 
   spine: { bg: 'bg-sky-950/80', border: 'border-sky-500/70', text: 'text-sky-100', solid: '#38bdf8' },
   leaf: { bg: 'bg-emerald-950/80', border: 'border-emerald-500/70', text: 'text-emerald-100', solid: '#34d399' },
   border: { bg: 'bg-amber-950/80', border: 'border-amber-500/70', text: 'text-amber-100', solid: '#fbbf24' },
+  access: { bg: 'bg-violet-950/80', border: 'border-violet-500/70', text: 'text-violet-100', solid: '#a78bfa' },
   standalone: { bg: 'bg-slate-800/80', border: 'border-slate-500/70', text: 'text-slate-100', solid: '#94a3b8' },
 }
 

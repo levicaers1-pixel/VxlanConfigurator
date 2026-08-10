@@ -37,6 +37,11 @@ export function IpPlanPanel({ ipPlan }: { ipPlan: IpAllocationResult | null }) {
     `${ip}/32`,
   ])
 
+  const mgmtRows: [string, string][] = Object.entries(ipPlan.mgmtIps).map(([id, ip]) => [
+    switchesById.get(id)?.name ?? id,
+    ip,
+  ])
+
   const asnRows: [string, string][] = Object.entries(ipPlan.asns).map(([id, asn]) => [
     switchesById.get(id)?.name ?? id,
     String(asn),
@@ -72,13 +77,14 @@ export function IpPlanPanel({ ipPlan }: { ipPlan: IpAllocationResult | null }) {
   return (
     <div className="overflow-y-auto p-3">
       <Table title="Loopbacks" rows={loopbackRows} />
+      <Table title="Management IPs" rows={mgmtRows} />
       <Table title="ASNs" rows={asnRows} />
       <Table title="Underlay links" rows={underlayRows} />
       <Table title="VSX keepalive" rows={vsxRows} />
       <Table title="Tenant subnets" rows={subnetRows} />
       <Table title="L2 VNIs" rows={l2VniRows} />
       <Table title="L3 VNIs" rows={l3VniRows} />
-      {loopbackRows.length === 0 && (
+      {project.switches.length === 0 && (
         <EmptyState
           icon={<Waypoints size={22} />}
           title="No switches yet"

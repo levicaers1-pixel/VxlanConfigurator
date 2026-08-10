@@ -1,6 +1,6 @@
 // ---------- Catalog (static, hardcoded, shipped with app) ----------
 
-export type SwitchRole = 'spine' | 'leaf' | 'border' | 'standalone'
+export type SwitchRole = 'spine' | 'leaf' | 'border' | 'access' | 'standalone'
 
 export type PortSpeedGbps = 1 | 10 | 25 | 40 | 100 | 400
 
@@ -15,7 +15,7 @@ export interface PortGroup {
 export interface SwitchCatalogEntry {
   id: string
   vendor: 'Aruba'
-  series: 'CX 8320' | 'CX 8325' | 'CX 8360' | 'CX 8400' | 'CX 9300'
+  series: 'CX 6200' | 'CX 6300' | 'CX 8320' | 'CX 8325' | 'CX 8360' | 'CX 8400' | 'CX 9300'
   model: string
   suitableRoles: SwitchRole[]
   portGroups: PortGroup[]
@@ -144,6 +144,10 @@ export interface AllocationError {
 export interface IpAllocationResult {
   underlayLinkIps: Record<string, { aIp: string; bIp: string; prefixLen: number }>
   loopbacks: Record<string, string>
+  /** Auto-allocated from settings.pools.mgmt (CIDR incl. prefix), or the switch's managementIp override verbatim. */
+  mgmtIps: Record<string, string>
+  /** First usable address in the mgmt pool; shared OOB gateway unless a switch overrides managementGateway. */
+  mgmtGateway: string
   vsxKeepalives: Record<string, { primaryIp: string; secondaryIp: string; primarySwitchId: string; secondarySwitchId: string }>
   tenantSubnets: Record<string, string>
   l2Vnis: Record<string, number>

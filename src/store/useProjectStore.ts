@@ -183,6 +183,18 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       mutate((project) => ({
         ...project,
         switches: project.switches.map((s) => (s.id === idA || s.id === idB ? { ...s, vsxGroupId: groupId } : s)),
+        // Any direct link already drawn between this pair almost certainly IS
+        // the intended ISL — retag it so `vsx.ts` picks it up automatically
+        // instead of silently omitting the ISL trunk config.
+        links: project.links.map((l) => {
+          const directPair =
+            (l.a.switchInstanceId === idA && l.b.switchInstanceId === idB) ||
+            (l.a.switchInstanceId === idB && l.b.switchInstanceId === idA)
+          if (directPair && (l.kind === 'underlay-p2p' || l.kind === 'unassigned')) {
+            return { ...l, kind: 'vsx-isl' as const }
+          }
+          return l
+        }),
       }))
     },
 

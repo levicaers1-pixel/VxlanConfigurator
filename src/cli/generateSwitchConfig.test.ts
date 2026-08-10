@@ -81,13 +81,16 @@ describe('generateSwitchConfig — EVPN, eBGP underlay', () => {
     expect(generateSwitchConfig('leaf1', project, ipPlan)).toMatchSnapshot()
   })
 
-  it('leaf config includes VSX, VLAN/VNI mapping, VRF, and EVPN address-family', () => {
+  it('leaf config includes VSX, VLAN/VNI mapping, VRF RD/RT, EVPN VLAN RD/RT, and EVPN address-family', () => {
     const config = generateSwitchConfig('leaf1', project, ipPlan)
     expect(config).toContain('vsx')
     expect(config).toContain('role primary')
     expect(config).toContain('vlan 10')
-    expect(config).toContain('vn-vni 10010')
+    expect(config).toContain('vni 10010')
     expect(config).toContain('vrf CUSTOMER-A')
+    expect(config).toContain('rd 65003:1')
+    expect(config).toContain('route-target export 65003:1')
+    expect(config).toMatch(/evpn\n {4}vlan 10\n {8}rd auto\n {8}route-target both auto/)
     expect(config).toContain('address-family l2vpn evpn')
     expect(config).toContain('interface vxlan 1')
   })
@@ -97,6 +100,77 @@ describe('generateSwitchConfig — EVPN, eBGP underlay', () => {
     expect(config).not.toContain('vn-vni')
     expect(config).not.toContain('vsx-sync')
     expect(config).not.toContain('interface vxlan')
+  })
+})
+
+describe('generateSwitchConfig — VSX keepalive interface', () => {
+  it('assigns the keepalive IP to a real interface when a link is marked vsx-keepalive', () => {
+    const { project } = buildFixture()
+    const withKeepalive: Project = {
+      ...project,
+      links: [...project.links, link('l6', 'leaf1', '1/1/52', 'leaf2', '1/1/52', 'vsx-keepalive')],
+    }
+    const plan = computeIpPlan(withKeepalive)
+    const config = generateSwitchConfig('leaf1', withKeepalive, plan)
+
+    expect(config).toContain('interface 1/1/52')
+    expect(config).toContain('vsx-keepalive-to-LEAF2')
+    expect(config).toContain(`ip address ${plan.vsxKeepalives['vsxA'].primaryIp}/31`)
+    expect(config).not.toContain('No link marked "vsx-keepalive"')
+  })
+
+  it('without a vsx-keepalive link, flags that the keepalive IPs are unassigned', () => {
+    const { project, ipPlan } = buildFixture()
+    const config = generateSwitchConfig('leaf1', project, ipPlan)
+    expect(config).toContain('No link marked "vsx-keepalive"')
+  })
+})
+
+describe('generateSwitchConfig — access role', () => {
+  it('generates only hostname/mgmt/trunk-uplink config, no fabric/VXLAN sections', () => {
+    const access1: SwitchInstance = { id: 'access1', catalogId: 'aruba-6200f-48g', name: 'ACCESS1', role: 'access', sequence: 1, position: { x: 0, y: 0 } }
+    const leaf1: SwitchInstance = sw('leaf1', 'leaf', 1, 'aruba-8325-48y8c')
+    const project: Project = {
+      formatVersion: 1,
+      projectName: 'access-fixture',
+      createdAt: '',
+      updatedAt: '',
+      settings: baseSettings(),
+      switches: [access1, leaf1],
+      links: [link('l1', 'access1', '1/1/49', 'leaf1', '1/1/1', 'unassigned')],
+      vlans: [],
+      vrfs: [],
+    }
+    const ipPlan = computeIpPlan(project)
+    const config = generateSwitchConfig('access1', project, ipPlan)
+
+    expect(config).toContain('hostname ACCESS1')
+    expect(config).toContain('interface mgmt')
+    expect(config).toContain('interface 1/1/49')
+    expect(config).toContain('vlan trunk allowed all')
+    expect(config).not.toContain('router bgp')
+    expect(config).not.toContain('vsx')
+    expect(config).not.toContain('interface vxlan')
+    expect(config).not.toContain('interface loopback')
+  })
+
+  it('access switches are excluded from loopback/ASN allocation', () => {
+    const access1: SwitchInstance = { id: 'access1', catalogId: 'aruba-6200f-48g', name: 'ACCESS1', role: 'access', sequence: 1, position: { x: 0, y: 0 } }
+    const project: Project = {
+      formatVersion: 1,
+      projectName: 'access-fixture-2',
+      createdAt: '',
+      updatedAt: '',
+      settings: baseSettings(),
+      switches: [access1],
+      links: [],
+      vlans: [],
+      vrfs: [],
+    }
+    const ipPlan = computeIpPlan(project)
+    expect(ipPlan.loopbacks.access1).toBeUndefined()
+    expect(ipPlan.asns.access1).toBeUndefined()
+    expect(ipPlan.mgmtIps.access1).toBeDefined()
   })
 })
 
@@ -134,11 +208,13 @@ describe('generateSwitchConfig — static VXLAN (no EVPN)', () => {
     expect(generateSwitchConfig('spine1', project, ipPlan)).toMatchSnapshot()
   })
 
-  it('has no BGP EVPN address-family or route-distinguisher anywhere', () => {
+  it('has no BGP EVPN address-family, RD, route-target, or evpn context anywhere', () => {
     const leaf = generateSwitchConfig('leaf1', project, ipPlan)
     const spine = generateSwitchConfig('spine1', project, ipPlan)
     expect(leaf).not.toContain('l2vpn evpn')
-    expect(leaf).not.toContain('route-distinguisher')
+    expect(leaf).not.toMatch(/^\s*rd /m)
+    expect(leaf).not.toContain('route-target')
+    expect(leaf).not.toMatch(/^evpn$/m)
     expect(spine).not.toContain('l2vpn evpn')
   })
 

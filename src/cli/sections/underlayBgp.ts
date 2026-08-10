@@ -1,16 +1,15 @@
 import type { SectionBuilder } from '../context'
-import { ownAndPeerIp, peerSwitch, vrfsOnSwitch } from '../context'
-
-function sortedVrfIndex(ctx: Parameters<SectionBuilder>[0], vrfId: string): number {
-  const sorted = [...ctx.project.vrfs].sort((a, b) => a.name.localeCompare(b.name))
-  return sorted.findIndex((v) => v.id === vrfId) + 1
-}
+import { ownAndPeerIp, peerSwitch } from '../context'
 
 /**
  * Single-session eBGP: underlay reachability and (in EVPN mode) the l2vpn evpn
  * address-family are both carried over the same directly-attached neighbor
  * sessions. Only used when underlayProtocol === 'ebgp'; the OSPF-underlay
  * case peers EVPN separately over loopbacks (see overlayEvpnBgp.ts).
+ *
+ * RD/route-target are NOT configured here — per Aruba's EVPN command docs
+ * they live in the `evpn`/`vlan` context (L2VNI) and the `vrf` context
+ * (L3VNI) instead. See evpnVlans.ts and vrfs.ts.
  */
 export const underlayBgp: SectionBuilder = (ctx, out) => {
   if (ctx.project.settings.underlayProtocol !== 'ebgp') return
@@ -58,16 +57,6 @@ export const underlayBgp: SectionBuilder = (ctx, out) => {
           ab.line(`neighbor ${ip.peerIp} next-hop-unchanged`)
         }
       })
-
-      for (const vrf of vrfsOnSwitch(ctx)) {
-        b.blank()
-        b.block(`vrf ${vrf.name}`, (vb) => {
-          vb.block('address-family l2vpn evpn', (ab) => {
-            ab.line('route-target both auto')
-            ab.line(`route-distinguisher ${loopback}:${sortedVrfIndex(ctx, vrf.id)}`)
-          })
-        })
-      }
     }
   })
   out.blank()

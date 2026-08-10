@@ -1,4 +1,5 @@
 import type { SectionBuilder } from '../context'
+import { LOOPBACK_ID } from './interfaces'
 
 /**
  * Spine-side EVPN route-reflector peering used only when underlayProtocol
@@ -24,7 +25,7 @@ export const spineEvpnRouteReflector: SectionBuilder = (ctx, out) => {
       b.line(`neighbor ${leafLoopback} remote-as ${leafAsn}`)
       b.line(`neighbor ${leafLoopback} description ${leaf.name}`)
       b.line(`neighbor ${leafLoopback} ebgp-multihop 3`)
-      b.line(`neighbor ${leafLoopback} update-source loopback 0`)
+      b.line(`neighbor ${leafLoopback} update-source loopback ${LOOPBACK_ID}`)
     }
     b.blank()
     b.block('address-family l2vpn evpn', (ab) => {

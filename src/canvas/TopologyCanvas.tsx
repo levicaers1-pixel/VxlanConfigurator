@@ -55,6 +55,8 @@ function CanvasInner() {
   const removeLink = useProjectStore((s) => s.removeLink)
   const selectNode = useSelectionStore((s) => s.selectNode)
   const selectEdge = useSelectionStore((s) => s.selectEdge)
+  const selectedNodeId = useSelectionStore((s) => s.selectedNodeId)
+  const selectedEdgeId = useSelectionStore((s) => s.selectedEdgeId)
   const [snapEnabled, setSnapEnabled] = useState(false)
   const [legendVisible, setLegendVisible] = useState(true)
 
@@ -64,6 +66,9 @@ function CanvasInner() {
         id: sw.id,
         type: 'switchNode',
         position: sw.position,
+        // Reflects our own selection store so react-flow's internal delete-key
+        // handling (which reads `.selected` off these controlled props) works.
+        selected: sw.id === selectedNodeId,
         data: {
           catalogId: sw.catalogId,
           role: sw.role,
@@ -72,7 +77,7 @@ function CanvasInner() {
           portStatus: portStatusFor(sw.id, project?.links ?? []),
         },
       })),
-    [project?.switches, project?.links],
+    [project?.switches, project?.links, selectedNodeId],
   )
 
   const edges: LinkEdgeType[] = useMemo(
@@ -85,9 +90,10 @@ function CanvasInner() {
         targetHandle: link.b.portName,
         type: 'linkEdge',
         reconnectable: true,
-        data: { kind: link.kind },
+        selected: link.id === selectedEdgeId,
+        data: { kind: link.kind, onDelete: () => removeLink(link.id) },
       })),
-    [project?.links],
+    [project?.links, selectedEdgeId, removeLink],
   )
 
   const onNodesChange = useCallback(

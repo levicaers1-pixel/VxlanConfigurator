@@ -49,3 +49,9 @@ export function vrfsOnSwitch(ctx: SwitchConfigContext) {
   const vrfIds = new Set(vlansOnSwitch(ctx).map((v) => v.vrfId).filter((id): id is string => !!id))
   return ctx.project.vrfs.filter((v) => vrfIds.has(v.id))
 }
+
+/** 1-based index of a VRF within the project's VRFs sorted by name — used to derive a stable RD/RT admin number. */
+export function vrfIndex(ctx: SwitchConfigContext, vrfId: string): number {
+  const sorted = [...ctx.project.vrfs].sort((a, b) => a.name.localeCompare(b.name))
+  return sorted.findIndex((v) => v.id === vrfId) + 1
+}

@@ -1,11 +1,13 @@
 import type { SectionBuilder } from '../context'
 
 export const management: SectionBuilder = (ctx, out) => {
-  if (!ctx.self.managementIp) return
+  const ip = ctx.ipPlan.mgmtIps[ctx.self.id]
+  if (!ip) return
+  const gateway = ctx.self.managementGateway ?? ctx.ipPlan.mgmtGateway
   out.block('interface mgmt', (b) => {
     b.line('no shutdown')
-    b.line(`ip static ${ctx.self.managementIp}`)
-    if (ctx.self.managementGateway) b.line(`default-gateway ${ctx.self.managementGateway}`)
+    b.line(`ip static ${ip}`)
+    if (gateway) b.line(`default-gateway ${gateway}`)
   })
   out.blank()
 }

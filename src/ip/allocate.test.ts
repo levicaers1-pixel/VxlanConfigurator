@@ -183,6 +183,47 @@ describe('computeIpPlan — pool exhaustion', () => {
   })
 })
 
+describe('computeIpPlan — management IPs', () => {
+  it('auto-allocates mgmt IPs for every switch, skipping the network and gateway addresses', () => {
+    const spine1 = sw('spine1', 'spine', 1)
+    const leaf1 = sw('leaf1', 'leaf', 1)
+    const project = baseProject({ switches: [spine1, leaf1] })
+    const result = computeIpPlan(project)
+
+    expect(result.mgmtGateway).toBe('192.168.1.1')
+    expect(result.mgmtIps.spine1).toBe('192.168.1.2/24')
+    expect(result.mgmtIps.leaf1).toBe('192.168.1.3/24')
+  })
+
+  it('honors a managementIp override verbatim instead of carving from the pool', () => {
+    const spine1 = { ...sw('spine1', 'spine', 1), managementIp: '10.99.0.5/24' }
+    const project = baseProject({ switches: [spine1] })
+    const result = computeIpPlan(project)
+    expect(result.mgmtIps.spine1).toBe('10.99.0.5/24')
+  })
+
+  it('allocates mgmt IPs for access-role switches too', () => {
+    const access1 = sw('access1', 'access', 1)
+    const project = baseProject({ switches: [access1] })
+    const result = computeIpPlan(project)
+    expect(result.mgmtIps.access1).toBe('192.168.1.2/24')
+  })
+})
+
+describe('computeIpPlan — access role exclusion', () => {
+  it('does not allocate a loopback or ASN for access-role switches', () => {
+    const spine1 = sw('spine1', 'spine', 1)
+    const access1 = sw('access1', 'access', 1)
+    const project = baseProject({ switches: [spine1, access1] })
+    const result = computeIpPlan(project)
+
+    expect(result.loopbacks.access1).toBeUndefined()
+    expect(result.asns.access1).toBeUndefined()
+    expect(result.loopbacks.spine1).toBe('10.255.0.0')
+    expect(result.asns.spine1).toBe(65001)
+  })
+})
+
 describe('computeIpPlan — VNIs and tenant subnets', () => {
   it('derives L2VNI from vlan+offset and L3VNI from sorted VRF index', () => {
     const vlans: VlanMapping[] = [

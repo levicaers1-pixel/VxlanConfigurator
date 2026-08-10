@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-const switchRoleSchema = z.enum(['spine', 'leaf', 'border', 'standalone'])
+const switchRoleSchema = z.enum(['spine', 'leaf', 'border', 'access', 'standalone'])
 const linkKindSchema = z.enum(['underlay-p2p', 'vsx-isl', 'vsx-keepalive', 'mgmt', 'unassigned'])
 
 const switchInstanceSchema = z.object({

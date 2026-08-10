@@ -3,7 +3,12 @@
 exports[`generateSwitchConfig — EVPN, OSPF underlay > generates a leaf config with OSPF underlay + multihop EVPN peering (golden) 1`] = `
 "hostname LEAF1
 
-interface loopback 0
+interface mgmt
+    no shutdown
+    ip static 192.168.1.4/24
+    default-gateway 192.168.1.1
+
+interface loopback 1
     ip address 10.255.0.2/32
     ip ospf 1 area 0.0.0.0
 
@@ -27,7 +32,7 @@ vsx
     system-mac 02:00:00:00:55:46
     inter-switch-link lag 256
     role primary
-    ! keepalive peering shown over a directly-addressed link; use a dedicated OOB/keepalive VRF per site standards
+    ! No link marked "vsx-keepalive" for this pair — these IPs aren't assigned to any interface yet. Draw a dedicated keepalive link and set its kind in the Inspector.
     keepalive peer 10.255.255.1 source 10.255.255.0
     linkup-delay-timer 600
     vsx-sync vsx-global
@@ -45,29 +50,38 @@ interface 1/1/51
 
 vlan 10
     name WEB-TIER
-    vn-vni 10010
 
 vlan 20
     name DB-TIER
-    vn-vni 10020
 
-interface vlan10
+interface vlan 10
     vsx-sync active-gateways
     ip mtu 9198
     vrf attach CUSTOMER-A
     ip address 10.10.0.2/24
-    active-gateway ip mac 02:00:01:00:c0:15
-    active-gateway ip 10.10.0.1
+    active-gateway ip 10.10.0.1 mac 02:00:01:00:c0:15
 
-interface vlan20
+interface vlan 20
     vsx-sync active-gateways
     ip mtu 9198
     vrf attach CUSTOMER-A
     ip address 10.10.1.2/24
-    active-gateway ip mac 02:00:01:00:c0:34
-    active-gateway ip 10.10.1.1
+    active-gateway ip 10.10.1.1 mac 02:00:01:00:c0:34
 
 vrf CUSTOMER-A
+    rd 65003:1
+    address-family ipv4 unicast
+        route-target export 65003:1
+        route-target import 65003:1
+    exit-address-family
+
+evpn
+    vlan 10
+        rd auto
+        route-target both auto
+    vlan 20
+        rd auto
+        route-target both auto
 
 router ospf 1
     router-id 10.255.0.2
@@ -78,11 +92,11 @@ router bgp 65003
     neighbor 10.255.0.0 remote-as 65001
     neighbor 10.255.0.0 description SPINE1
     neighbor 10.255.0.0 ebgp-multihop 3
-    neighbor 10.255.0.0 update-source loopback 0
+    neighbor 10.255.0.0 update-source loopback 1
     neighbor 10.255.0.1 remote-as 65002
     neighbor 10.255.0.1 description SPINE2
     neighbor 10.255.0.1 ebgp-multihop 3
-    neighbor 10.255.0.1 update-source loopback 0
+    neighbor 10.255.0.1 update-source loopback 1
 
     address-family l2vpn evpn
         neighbor 10.255.0.0 activate
@@ -90,27 +104,28 @@ router bgp 65003
         neighbor 10.255.0.1 activate
         neighbor 10.255.0.1 next-hop-unchanged
 
-    vrf CUSTOMER-A
-        address-family l2vpn evpn
-            route-target both auto
-            route-distinguisher 10.255.0.2:1
-
 interface vxlan 1
     no shutdown
-    source-ip 10.255.0.2
+    source ip 10.255.0.2
     vni 10010
         vlan 10
     vni 10020
         vlan 20
-    vrf CUSTOMER-A
-        vni 100000
+    vni 100000
+        routing
+        vrf CUSTOMER-A
 "
 `;
 
 exports[`generateSwitchConfig — EVPN, OSPF underlay > generates a spine config with OSPF + route-reflector EVPN peering (golden) 1`] = `
 "hostname SPINE1
 
-interface loopback 0
+interface mgmt
+    no shutdown
+    ip static 192.168.1.2/24
+    default-gateway 192.168.1.1
+
+interface loopback 1
     ip address 10.255.0.0/32
     ip ospf 1 area 0.0.0.0
 
@@ -139,11 +154,11 @@ router bgp 65001
     neighbor 10.255.0.2 remote-as 65003
     neighbor 10.255.0.2 description LEAF1
     neighbor 10.255.0.2 ebgp-multihop 3
-    neighbor 10.255.0.2 update-source loopback 0
+    neighbor 10.255.0.2 update-source loopback 1
     neighbor 10.255.0.3 remote-as 65004
     neighbor 10.255.0.3 description LEAF2
     neighbor 10.255.0.3 ebgp-multihop 3
-    neighbor 10.255.0.3 update-source loopback 0
+    neighbor 10.255.0.3 update-source loopback 1
 
     address-family l2vpn evpn
         neighbor 10.255.0.2 activate
@@ -156,7 +171,12 @@ router bgp 65001
 exports[`generateSwitchConfig — EVPN, eBGP underlay > generates a VSX leaf config (golden) 1`] = `
 "hostname LEAF1
 
-interface loopback 0
+interface mgmt
+    no shutdown
+    ip static 192.168.1.4/24
+    default-gateway 192.168.1.1
+
+interface loopback 1
     ip address 10.255.0.2/32
 
 interface 1/1/49
@@ -177,7 +197,7 @@ vsx
     system-mac 02:00:00:00:55:46
     inter-switch-link lag 256
     role primary
-    ! keepalive peering shown over a directly-addressed link; use a dedicated OOB/keepalive VRF per site standards
+    ! No link marked "vsx-keepalive" for this pair — these IPs aren't assigned to any interface yet. Draw a dedicated keepalive link and set its kind in the Inspector.
     keepalive peer 10.255.255.1 source 10.255.255.0
     linkup-delay-timer 600
     vsx-sync vsx-global
@@ -195,29 +215,38 @@ interface 1/1/51
 
 vlan 10
     name WEB-TIER
-    vn-vni 10010
 
 vlan 20
     name DB-TIER
-    vn-vni 10020
 
-interface vlan10
+interface vlan 10
     vsx-sync active-gateways
     ip mtu 9198
     vrf attach CUSTOMER-A
     ip address 10.10.0.2/24
-    active-gateway ip mac 02:00:01:00:c0:15
-    active-gateway ip 10.10.0.1
+    active-gateway ip 10.10.0.1 mac 02:00:01:00:c0:15
 
-interface vlan20
+interface vlan 20
     vsx-sync active-gateways
     ip mtu 9198
     vrf attach CUSTOMER-A
     ip address 10.10.1.2/24
-    active-gateway ip mac 02:00:01:00:c0:34
-    active-gateway ip 10.10.1.1
+    active-gateway ip 10.10.1.1 mac 02:00:01:00:c0:34
 
 vrf CUSTOMER-A
+    rd 65003:1
+    address-family ipv4 unicast
+        route-target export 65003:1
+        route-target import 65003:1
+    exit-address-family
+
+evpn
+    vlan 10
+        rd auto
+        route-target both auto
+    vlan 20
+        rd auto
+        route-target both auto
 
 router bgp 65003
     bgp router-id 10.255.0.2
@@ -238,27 +267,28 @@ router bgp 65003
         neighbor 10.0.0.4 activate
         neighbor 10.0.0.4 next-hop-unchanged
 
-    vrf CUSTOMER-A
-        address-family l2vpn evpn
-            route-target both auto
-            route-distinguisher 10.255.0.2:1
-
 interface vxlan 1
     no shutdown
-    source-ip 10.255.0.2
+    source ip 10.255.0.2
     vni 10010
         vlan 10
     vni 10020
         vlan 20
-    vrf CUSTOMER-A
-        vni 100000
+    vni 100000
+        routing
+        vrf CUSTOMER-A
 "
 `;
 
 exports[`generateSwitchConfig — EVPN, eBGP underlay > generates a spine config (golden) 1`] = `
 "hostname SPINE1
 
-interface loopback 0
+interface mgmt
+    no shutdown
+    ip static 192.168.1.2/24
+    default-gateway 192.168.1.1
+
+interface loopback 1
     ip address 10.255.0.0/32
 
 interface 1/1/1
@@ -293,18 +323,18 @@ router bgp 65001
         neighbor 10.0.0.1 next-hop-unchanged
         neighbor 10.0.0.3 activate
         neighbor 10.0.0.3 next-hop-unchanged
-
-    vrf CUSTOMER-A
-        address-family l2vpn evpn
-            route-target both auto
-            route-distinguisher 10.255.0.0:1
 "
 `;
 
 exports[`generateSwitchConfig — static VXLAN (no EVPN) > generates a VSX leaf config with static remote-VTEP flood lists (golden) 1`] = `
 "hostname LEAF1
 
-interface loopback 0
+interface mgmt
+    no shutdown
+    ip static 192.168.1.4/24
+    default-gateway 192.168.1.1
+
+interface loopback 1
     ip address 10.255.0.2/32
 
 interface 1/1/49
@@ -325,7 +355,7 @@ vsx
     system-mac 02:00:00:00:55:46
     inter-switch-link lag 256
     role primary
-    ! keepalive peering shown over a directly-addressed link; use a dedicated OOB/keepalive VRF per site standards
+    ! No link marked "vsx-keepalive" for this pair — these IPs aren't assigned to any interface yet. Draw a dedicated keepalive link and set its kind in the Inspector.
     keepalive peer 10.255.255.1 source 10.255.255.0
     linkup-delay-timer 600
     vsx-sync vsx-global
@@ -343,27 +373,23 @@ interface 1/1/51
 
 vlan 10
     name WEB-TIER
-    vn-vni 10010
 
 vlan 20
     name DB-TIER
-    vn-vni 10020
 
-interface vlan10
+interface vlan 10
     vsx-sync active-gateways
     ip mtu 9198
     vrf attach CUSTOMER-A
     ip address 10.10.0.2/24
-    active-gateway ip mac 02:00:01:00:c0:15
-    active-gateway ip 10.10.0.1
+    active-gateway ip 10.10.0.1 mac 02:00:01:00:c0:15
 
-interface vlan20
+interface vlan 20
     vsx-sync active-gateways
     ip mtu 9198
     vrf attach CUSTOMER-A
     ip address 10.10.1.2/24
-    active-gateway ip mac 02:00:01:00:c0:34
-    active-gateway ip 10.10.1.1
+    active-gateway ip 10.10.1.1 mac 02:00:01:00:c0:34
 
 vrf CUSTOMER-A
 
@@ -382,7 +408,7 @@ router bgp 65003
 
 interface vxlan 1
     no shutdown
-    source-ip 10.255.0.2
+    source ip 10.255.0.2
     ! Static mode: no BGP EVPN — remote VTEP peers below are derived from topology, not learned dynamically.
     vni 10010
         vlan 10
@@ -396,7 +422,12 @@ interface vxlan 1
 exports[`generateSwitchConfig — static VXLAN (no EVPN) > generates a spine-role switch config too — static mode uses one recipe for every role 1`] = `
 "hostname SPINE1
 
-interface loopback 0
+interface mgmt
+    no shutdown
+    ip static 192.168.1.2/24
+    default-gateway 192.168.1.1
+
+interface loopback 1
     ip address 10.255.0.0/32
 
 interface 1/1/1

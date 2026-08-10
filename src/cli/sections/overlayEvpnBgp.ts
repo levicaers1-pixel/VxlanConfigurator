@@ -1,15 +1,12 @@
 import type { SectionBuilder } from '../context'
-import { vrfsOnSwitch } from '../context'
-
-function sortedVrfIndex(ctx: Parameters<SectionBuilder>[0], vrfId: string): number {
-  const sorted = [...ctx.project.vrfs].sort((a, b) => a.name.localeCompare(b.name))
-  return sorted.findIndex((v) => v.id === vrfId) + 1
-}
+import { LOOPBACK_ID } from './interfaces'
 
 /**
  * Leaf-side EVPN overlay peering used only when underlayProtocol === 'ospf':
  * underlay reachability comes from OSPF, and the l2vpn evpn address-family is
  * peered separately (multihop) between each leaf and every spine.
+ *
+ * RD/route-target are NOT configured here — see evpnVlans.ts and vrfs.ts.
  */
 export const overlayEvpnBgp: SectionBuilder = (ctx, out) => {
   if (ctx.project.settings.underlayProtocol !== 'ospf') return
@@ -30,7 +27,7 @@ export const overlayEvpnBgp: SectionBuilder = (ctx, out) => {
       b.line(`neighbor ${spineLoopback} remote-as ${spineAsn}`)
       b.line(`neighbor ${spineLoopback} description ${spine.name}`)
       b.line(`neighbor ${spineLoopback} ebgp-multihop 3`)
-      b.line(`neighbor ${spineLoopback} update-source loopback 0`)
+      b.line(`neighbor ${spineLoopback} update-source loopback ${LOOPBACK_ID}`)
     }
     b.blank()
     b.block('address-family l2vpn evpn', (ab) => {
@@ -41,15 +38,6 @@ export const overlayEvpnBgp: SectionBuilder = (ctx, out) => {
         ab.line(`neighbor ${spineLoopback} next-hop-unchanged`)
       }
     })
-    for (const vrf of vrfsOnSwitch(ctx)) {
-      b.blank()
-      b.block(`vrf ${vrf.name}`, (vb) => {
-        vb.block('address-family l2vpn evpn', (ab) => {
-          ab.line('route-target both auto')
-          ab.line(`route-distinguisher ${loopback}:${sortedVrfIndex(ctx, vrf.id)}`)
-        })
-      })
-    }
   })
   out.blank()
 }

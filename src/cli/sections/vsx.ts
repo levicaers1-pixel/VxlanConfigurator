@@ -17,11 +17,15 @@ export const vsx: SectionBuilder = (ctx, out) => {
   const peerIp = isPrimary ? kv.secondaryIp : kv.primaryIp
   const systemMac = deterministicMac('00', ctx.self.vsxGroupId)
 
+  const hasKeepaliveLink = ctx.peerLinks.some((l) => l.kind === 'vsx-keepalive')
+
   out.block('vsx', (b) => {
     b.line(`system-mac ${systemMac}`)
     b.line(`inter-switch-link lag ${VSX_ISL_LAG_ID}`)
     b.line(`role ${isPrimary ? 'primary' : 'secondary'}`)
-    b.comment('keepalive peering shown over a directly-addressed link; use a dedicated OOB/keepalive VRF per site standards')
+    if (!hasKeepaliveLink) {
+      b.comment('No link marked "vsx-keepalive" for this pair — these IPs aren\'t assigned to any interface yet. Draw a dedicated keepalive link and set its kind in the Inspector.')
+    }
     b.line(`keepalive peer ${peerIp} source ${ownIp}`)
     b.line('linkup-delay-timer 600')
     b.line('vsx-sync vsx-global')

@@ -7,13 +7,14 @@ import type {
   SwitchRole,
   VlanMapping,
 } from '../domain/types'
-import { carve, cidrToString, intToIp, pointToPointUsable } from './cidr'
+import { carve, cidrToString, intToIp, parseCidr, pointToPointUsable } from './cidr'
 
 const ROLE_PRIORITY: Record<SwitchRole, number> = {
   spine: 0,
   leaf: 1,
   border: 2,
-  standalone: 3,
+  access: 3,
+  standalone: 4,
 }
 
 function sortSwitches(switches: SwitchInstance[]): SwitchInstance[] {
@@ -65,12 +66,15 @@ export function computeIpPlan(project: Project): IpAllocationResult {
   const { settings } = project
   const sortedSwitches = sortSwitches(project.switches)
   const order = globalOrderMap(sortedSwitches)
+  // Access switches sit outside the VXLAN fabric — they don't need a VTEP
+  // loopback or an underlay ASN, only OOB management (handled separately below).
+  const fabricSwitches = sortedSwitches.filter((s) => s.role !== 'access')
 
   // ---------- Loopbacks ----------
   const loopbacks: Record<string, string> = {}
   {
     const gen = carve(settings.pools.loopback.supernet, 32)
-    for (const sw of sortedSwitches) {
+    for (const sw of fabricSwitches) {
       if (sw.loopbackOverride) {
         loopbacks[sw.id] = sw.loopbackOverride
         continue
@@ -86,6 +90,40 @@ export function computeIpPlan(project: Project): IpAllocationResult {
         continue
       }
       loopbacks[sw.id] = intToIp(next.value)
+    }
+  }
+
+  // ---------- Management IPs (every switch, including access role) ----------
+  const mgmtIps: Record<string, string> = {}
+  let mgmtGateway = ''
+  {
+    const { network, prefixLen } = (() => {
+      try {
+        return parseCidr(settings.pools.mgmt.supernet)
+      } catch {
+        return { network: 0, prefixLen: 32 }
+      }
+    })()
+    mgmtGateway = intToIp((network + 1) >>> 0)
+    const gen = carve(settings.pools.mgmt.supernet, 32)
+    gen.next() // skip .0 (network)
+    gen.next() // skip .1 (reserved for gateway)
+    for (const sw of sortedSwitches) {
+      if (sw.managementIp) {
+        mgmtIps[sw.id] = sw.managementIp
+        continue
+      }
+      const next = gen.next()
+      if (next.done) {
+        errors.push({
+          severity: 'warning',
+          scope: 'loopback',
+          refId: sw.id,
+          message: `Management pool ${settings.pools.mgmt.supernet} exhausted — no address available for ${sw.name}`,
+        })
+        continue
+      }
+      mgmtIps[sw.id] = `${intToIp(next.value)}/${prefixLen}`
     }
   }
 
@@ -224,17 +262,17 @@ export function computeIpPlan(project: Project): IpAllocationResult {
   const asns: Record<string, number> = {}
   {
     if (settings.asnScheme === 'per-device-unique') {
-      sortedSwitches.forEach((sw, idx) => {
+      fabricSwitches.forEach((sw, idx) => {
         asns[sw.id] = sw.asnOverride ?? settings.baseAsn + idx + 1
       })
     } else {
       // shared-leaf-asn: spines get unique ASNs; VSX-paired (or standalone) leaves
       // share one ASN per VSX group / per standalone switch.
-      const spines = sortedSwitches.filter((s) => s.role === 'spine')
+      const spines = fabricSwitches.filter((s) => s.role === 'spine')
       spines.forEach((sw, idx) => {
         asns[sw.id] = sw.asnOverride ?? settings.baseAsn + idx + 1
       })
-      const nonSpines = sortedSwitches.filter((s) => s.role !== 'spine')
+      const nonSpines = fabricSwitches.filter((s) => s.role !== 'spine')
       const groupAsn = new Map<string, number>()
       let leafCounter = 0
       for (const sw of nonSpines) {
@@ -255,6 +293,8 @@ export function computeIpPlan(project: Project): IpAllocationResult {
   return {
     underlayLinkIps,
     loopbacks,
+    mgmtIps,
+    mgmtGateway,
     vsxKeepalives,
     tenantSubnets,
     l2Vnis,

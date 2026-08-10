@@ -5,8 +5,11 @@ import type { SectionBuilder, SwitchConfigContext } from './context'
 import { spineEvpn } from './recipes/spineEvpn'
 import { leafEvpnVsx } from './recipes/leafEvpnVsx'
 import { staticVxlan } from './recipes/staticVxlan'
+import { accessSwitch } from './recipes/accessSwitch'
 
 function pickRecipe(ctx: SwitchConfigContext): SectionBuilder[] {
+  // Access switches are never fabric/VXLAN participants, regardless of fabric mode.
+  if (ctx.self.role === 'access') return accessSwitch
   if (ctx.project.settings.fabricMode === 'static-vxlan') return staticVxlan
   if (ctx.self.role === 'spine') return spineEvpn
   return leafEvpnVsx

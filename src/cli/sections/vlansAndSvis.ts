@@ -8,10 +8,8 @@ export const vlansAndSvis: SectionBuilder = (ctx, out) => {
   const vlans = vlansOnSwitch(ctx)
 
   for (const vlan of vlans) {
-    const vni = ctx.ipPlan.l2Vnis[vlan.id]
     out.block(`vlan ${vlan.vlanId}`, (b) => {
       b.line(`name ${vlan.name}`)
-      if (vni !== undefined) b.line(`vn-vni ${vni}`)
     })
     out.blank()
   }
@@ -41,15 +39,14 @@ export const vlansAndSvis: SectionBuilder = (ctx, out) => {
     }
     const gwMac = vlan.activeGatewayMacOverride ?? deterministicMac('01', vlan.id)
 
-    out.block(`interface vlan${vlan.vlanId}`, (b) => {
+    // interface vlan <ID> — note the space; AOS-CX rejects "vlan10" run together.
+    out.block(`interface vlan ${vlan.vlanId}`, (b) => {
       if (isVsx) b.line('vsx-sync active-gateways')
       if (ctx.project.settings.jumboMtu) b.line('ip mtu 9198')
       b.line(`vrf attach ${vrf.name}`)
       b.line(`ip address ${realIp}/${prefixLen}`)
-      if (isVsx) {
-        b.line(`active-gateway ip mac ${gwMac}`)
-        b.line(`active-gateway ip ${gatewayIp}`)
-      }
+      // Real syntax is a single combined command, not two separate "active-gateway" lines.
+      if (isVsx) b.line(`active-gateway ip ${gatewayIp} mac ${gwMac}`)
     })
     out.blank()
   }
