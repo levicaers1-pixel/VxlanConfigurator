@@ -15,7 +15,7 @@ export interface PortGroup {
 export interface SwitchCatalogEntry {
   id: string
   vendor: 'Aruba'
-  series: 'CX 6200' | 'CX 6300' | 'CX 8320' | 'CX 8325' | 'CX 8325H' | 'CX 8360' | 'CX 8400' | 'CX 9300'
+  series: 'CX 6200' | 'CX 6300' | 'CX 8100' | 'CX 8320' | 'CX 8325' | 'CX 8325H' | 'CX 8360' | 'CX 8400' | 'CX 9300'
   model: string
   suitableRoles: SwitchRole[]
   portGroups: PortGroup[]

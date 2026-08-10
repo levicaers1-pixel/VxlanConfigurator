@@ -204,6 +204,52 @@ export const SWITCH_CATALOG: SwitchCatalogEntry[] = [
     maxVlans: 4094,
     notes: 'Campus access/aggregation switch, 48x 1G copper + 4x 25/50G SFP56 uplinks (shown at 40G). Supports VSX for dual-homed uplinks but is not a VXLAN VTEP in this tool.',
   },
+  {
+    id: 'aruba-6300m-24sfp',
+    vendor: 'Aruba',
+    series: 'CX 6300',
+    model: '6300M 24SFP+ 4SFP56',
+    suitableRoles: ['access'],
+    portGroups: [
+      { count: 24, speedGbps: 10, namePrefix: '1/1/', startIndex: 1 },
+      { count: 4, speedGbps: 40, namePrefix: '1/1/', startIndex: 25 },
+    ],
+    supportsVsx: true,
+    supportsEvpn: false,
+    maxVlans: 4094,
+    notes: 'All-fiber campus access/aggregation switch, 24x 1/10G SFP+ downlinks + 4x 25/50G SFP56 uplinks (shown at 40G). Supports VSX for dual-homed uplinks but is not a VXLAN VTEP in this tool.',
+  },
+  {
+    id: 'aruba-6300m-48sfp',
+    vendor: 'Aruba',
+    series: 'CX 6300',
+    model: '6300M 48SFP+ 4SFP56',
+    suitableRoles: ['access'],
+    portGroups: [
+      { count: 48, speedGbps: 10, namePrefix: '1/1/', startIndex: 1 },
+      { count: 4, speedGbps: 40, namePrefix: '1/1/', startIndex: 49 },
+    ],
+    supportsVsx: true,
+    supportsEvpn: false,
+    maxVlans: 4094,
+    notes: 'All-fiber campus access/aggregation switch, 48x 1/10G SFP+ downlinks + 4x 25/50G SFP56 uplinks (shown at 40G). Supports VSX for dual-homed uplinks but is not a VXLAN VTEP in this tool.',
+  },
+  {
+    id: 'aruba-8100-40xt-8sfp-4qsfp',
+    vendor: 'Aruba',
+    series: 'CX 8100',
+    model: '8100 40XT 8SFP+ 4QSFP28',
+    suitableRoles: ['access'],
+    portGroups: [
+      { count: 40, speedGbps: 10, namePrefix: '1/1/', startIndex: 1 },
+      { count: 8, speedGbps: 10, namePrefix: '1/1/', startIndex: 41 },
+      { count: 4, speedGbps: 100, namePrefix: '1/1/', startIndex: 49 },
+    ],
+    supportsVsx: true,
+    supportsEvpn: false,
+    maxVlans: 4094,
+    notes: '40x 100M/1/2.5/5/10G BASE-T copper + 8x 1/10G SFP+ + 4x 40/100G QSFP28 uplinks (shown at 100G). High fabric-uplink bandwidth access/aggregation switch. Supports VSX for dual-homed uplinks but is not a VXLAN VTEP in this tool — verify VSX support against your target firmware.',
+  },
 ]
 
 export function getCatalogEntry(id: string): SwitchCatalogEntry | undefined {
