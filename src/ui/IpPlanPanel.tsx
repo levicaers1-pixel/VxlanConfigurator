@@ -1,11 +1,13 @@
+import { Waypoints } from 'lucide-react'
 import { useProjectStore } from '../store/useProjectStore'
 import type { IpAllocationResult } from '../domain/types'
+import { EmptyState } from './primitives'
 
 function Table({ title, rows }: { title: string; rows: [string, string][] }) {
   if (rows.length === 0) return null
   return (
     <div className="mb-4">
-      <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">{title}</h4>
+      <h4 className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{title}</h4>
       <table className="w-full text-xs">
         <tbody>
           {rows.map(([k, v]) => (
@@ -22,7 +24,8 @@ function Table({ title, rows }: { title: string; rows: [string, string][] }) {
 
 export function IpPlanPanel({ ipPlan }: { ipPlan: IpAllocationResult | null }) {
   const project = useProjectStore((s) => s.project)
-  if (!project || !ipPlan) return <div className="p-3 text-xs text-slate-500">No topology yet.</div>
+  if (!project || !ipPlan)
+    return <EmptyState icon={<Waypoints size={22} />} title="No topology yet" hint="The IP plan fills in live as you add switches and links." />
 
   const switchesById = new Map(project.switches.map((s) => [s.id, s]))
   const linksById = new Map(project.links.map((l) => [l.id, l]))
@@ -76,7 +79,11 @@ export function IpPlanPanel({ ipPlan }: { ipPlan: IpAllocationResult | null }) {
       <Table title="L2 VNIs" rows={l2VniRows} />
       <Table title="L3 VNIs" rows={l3VniRows} />
       {loopbackRows.length === 0 && (
-        <div className="text-xs text-slate-500">Add switches and links on the canvas to populate the IP plan.</div>
+        <EmptyState
+          icon={<Waypoints size={22} />}
+          title="No switches yet"
+          hint="Add switches and links on the canvas to populate the IP plan."
+        />
       )}
     </div>
   )

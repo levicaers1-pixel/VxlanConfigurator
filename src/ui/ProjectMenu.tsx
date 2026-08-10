@@ -1,16 +1,20 @@
 import { useRef, useState } from 'react'
+import { FilePlus2, FolderUp, PackageOpen, Redo2, Save, Undo2 } from 'lucide-react'
 import { useProjectStore } from '../store/useProjectStore'
 import { exportProject } from '../persistence/exportProject'
 import { importProjectFile } from '../persistence/importProject'
 import { downloadConfigBundle } from '../cli/generateBundle'
 import type { IpAllocationResult } from '../domain/types'
-
-const buttonClass = 'rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800'
+import { Button, IconButton } from './primitives'
 
 export function ProjectMenu({ ipPlan }: { ipPlan: IpAllocationResult | null }) {
   const project = useProjectStore((s) => s.project)
   const loadProject = useProjectStore((s) => s.loadProject)
   const closeProject = useProjectStore((s) => s.closeProject)
+  const undo = useProjectStore((s) => s.undo)
+  const redo = useProjectStore((s) => s.redo)
+  const canUndo = useProjectStore((s) => s.past.length > 0)
+  const canRedo = useProjectStore((s) => s.future.length > 0)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -23,12 +27,16 @@ export function ProjectMenu({ ipPlan }: { ipPlan: IpAllocationResult | null }) {
           {error}
         </span>
       )}
-      <button className={buttonClass} onClick={() => exportProject(project)}>
+      <div className="flex items-center gap-1 border-r border-slate-800 pr-2">
+        <IconButton icon={<Undo2 size={14} />} disabled={!canUndo} onClick={undo} title="Undo (Ctrl+Z)" />
+        <IconButton icon={<Redo2 size={14} />} disabled={!canRedo} onClick={redo} title="Redo (Ctrl+Shift+Z)" />
+      </div>
+      <Button icon={<Save size={13} />} onClick={() => exportProject(project)}>
         Save
-      </button>
-      <button className={buttonClass} onClick={() => fileInputRef.current?.click()}>
+      </Button>
+      <Button icon={<FolderUp size={13} />} onClick={() => fileInputRef.current?.click()}>
         Load
-      </button>
+      </Button>
       <input
         ref={fileInputRef}
         type="file"
@@ -47,15 +55,15 @@ export function ProjectMenu({ ipPlan }: { ipPlan: IpAllocationResult | null }) {
           loadProject(result.project)
         }}
       />
-      <button
-        className={buttonClass}
+      <Button
+        icon={<PackageOpen size={13} />}
         disabled={!ipPlan}
         onClick={() => ipPlan && downloadConfigBundle(project, ipPlan)}
       >
-        Download all configs
-      </button>
-      <button
-        className={buttonClass}
+        Download all
+      </Button>
+      <Button
+        icon={<FilePlus2 size={13} />}
         onClick={() => {
           if (window.confirm('Start a new fabric? Unsaved changes to the current one will be lost.')) {
             closeProject()
@@ -63,7 +71,7 @@ export function ProjectMenu({ ipPlan }: { ipPlan: IpAllocationResult | null }) {
         }}
       >
         New
-      </button>
+      </Button>
     </div>
   )
 }

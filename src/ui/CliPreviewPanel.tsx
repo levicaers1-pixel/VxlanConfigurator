@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
+import { Check, Copy, Download, Terminal } from 'lucide-react'
 import { useProjectStore } from '../store/useProjectStore'
 import { generateSwitchConfig } from '../cli/generateSwitchConfig'
 import type { IpAllocationResult } from '../domain/types'
+import { EmptyState } from './primitives'
 
 function downloadText(filename: string, text: string) {
   const blob = new Blob([text], { type: 'text/plain' })
@@ -29,7 +31,13 @@ export function CliPreviewPanel({ ipPlan }: { ipPlan: IpAllocationResult | null 
   }, [project, ipPlan, activeId])
 
   if (!project || project.switches.length === 0) {
-    return <div className="p-3 text-xs text-slate-500">Add switches to the topology to generate CLI config.</div>
+    return (
+      <EmptyState
+        icon={<Terminal size={22} />}
+        title="No CLI to show yet"
+        hint="Add switches to the topology and their per-device Aruba AOS-CX config will appear here."
+      />
+    )
   }
   if (!ipPlan) return null
 
@@ -42,8 +50,8 @@ export function CliPreviewPanel({ ipPlan }: { ipPlan: IpAllocationResult | null 
           <button
             key={sw.id}
             onClick={() => setSelectedId(sw.id)}
-            className={`rounded px-2 py-1 text-xs ${
-              sw.id === activeId ? 'bg-sky-800 text-sky-100' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'
+            className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+              sw.id === activeId ? 'bg-sky-600 text-white' : 'bg-slate-900 text-slate-400 hover:bg-slate-800'
             }`}
           >
             {sw.name}
@@ -51,22 +59,24 @@ export function CliPreviewPanel({ ipPlan }: { ipPlan: IpAllocationResult | null 
         ))}
       </div>
       <div className="flex items-center justify-between px-3 py-2">
-        <span className="text-xs text-slate-400">{activeSwitch?.name}.txt</span>
+        <span className="font-mono text-[11px] text-slate-500">{activeSwitch?.name}.txt</span>
         <div className="flex gap-2">
           <button
-            className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800"
+            className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800"
             onClick={async () => {
               await navigator.clipboard.writeText(config)
               setCopied(true)
               setTimeout(() => setCopied(false), 1500)
             }}
           >
-            {copied ? 'Copied!' : 'Copy'}
+            {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+            {copied ? 'Copied' : 'Copy'}
           </button>
           <button
-            className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800"
+            className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800"
             onClick={() => activeSwitch && downloadText(`${activeSwitch.name}.txt`, config)}
           >
+            <Download size={12} />
             Download
           </button>
         </div>

@@ -1,22 +1,45 @@
+import { MousePointerClick } from 'lucide-react'
 import { useProjectStore } from '../store/useProjectStore'
 import { useSelectionStore } from '../store/useSelectionStore'
 import { getCatalogEntry } from '../domain/catalog'
-import type { LinkKind, SwitchRole } from '../domain/types'
+import { listPorts } from '../domain/ports'
+import { checkConnectPorts } from '../canvas/linkValidation'
+import type { Link, LinkKind, SwitchInstance, SwitchRole } from '../domain/types'
 import type { IpAllocationResult } from '../domain/types'
+import { LINK_KIND_LABEL } from './theme'
+import { EmptyState as EmptyStatePrimitive } from './primitives'
 
 const ROLES: SwitchRole[] = ['spine', 'leaf', 'border', 'standalone']
 const LINK_KINDS: LinkKind[] = ['underlay-p2p', 'vsx-isl', 'vsx-keepalive', 'mgmt', 'unassigned']
+
+function portOptions(sw: SwitchInstance | undefined, links: Link[], currentPort: string, excludeLinkId: string) {
+  if (!sw) return []
+  const entry = getCatalogEntry(sw.catalogId)
+  if (!entry) return []
+  const used = new Set(
+    links
+      .filter((l) => l.id !== excludeLinkId)
+      .flatMap((l) => [
+        l.a.switchInstanceId === sw.id ? l.a.portName : null,
+        l.b.switchInstanceId === sw.id ? l.b.portName : null,
+      ])
+      .filter((p): p is string => !!p),
+  )
+  return listPorts(entry).map((port) => ({ port, disabled: used.has(port) && port !== currentPort }))
+}
 
 export function Inspector({ ipPlan }: { ipPlan: IpAllocationResult | null }) {
   const project = useProjectStore((s) => s.project)
   const updateSwitch = useProjectStore((s) => s.updateSwitch)
   const removeSwitch = useProjectStore((s) => s.removeSwitch)
+  const duplicateSwitch = useProjectStore((s) => s.duplicateSwitch)
   const setVsxPair = useProjectStore((s) => s.setVsxPair)
   const clearVsxPair = useProjectStore((s) => s.clearVsxPair)
   const updateLink = useProjectStore((s) => s.updateLink)
   const removeLink = useProjectStore((s) => s.removeLink)
   const selectedNodeId = useSelectionStore((s) => s.selectedNodeId)
   const selectedEdgeId = useSelectionStore((s) => s.selectedEdgeId)
+  const selectNode = useSelectionStore((s) => s.selectNode)
 
   if (!project) return null
 
@@ -98,12 +121,23 @@ export function Inspector({ ipPlan }: { ipPlan: IpAllocationResult | null }) {
           )}
         </div>
 
-        <button
-          className="mt-2 rounded border border-rose-900 bg-rose-950/30 px-2 py-1 text-xs text-rose-300 hover:bg-rose-950/60"
-          onClick={() => removeSwitch(sw.id)}
-        >
-          Delete switch
-        </button>
+        <div className="flex gap-2">
+          <button
+            className="flex-1 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800"
+            onClick={() => {
+              const newId = duplicateSwitch(sw.id)
+              if (newId) selectNode(newId)
+            }}
+          >
+            Duplicate
+          </button>
+          <button
+            className="flex-1 rounded border border-rose-900 bg-rose-950/30 px-2 py-1 text-xs text-rose-300 hover:bg-rose-950/60"
+            onClick={() => removeSwitch(sw.id)}
+          >
+            Delete switch
+          </button>
+        </div>
       </div>
     )
   }
@@ -115,12 +149,60 @@ export function Inspector({ ipPlan }: { ipPlan: IpAllocationResult | null }) {
     const switchB = project.switches.find((s) => s.id === link.b.switchInstanceId)
     const ip = ipPlan?.underlayLinkIps[link.id]
 
+    const optionsA = portOptions(switchA, project.links, link.a.portName, link.id)
+    const optionsB = portOptions(switchB, project.links, link.b.portName, link.id)
+
+    const tryUpdatePort = (side: 'a' | 'b', newPort: string) => {
+      if (!switchA || !switchB) return
+      const portA = side === 'a' ? newPort : link.a.portName
+      const portB = side === 'b' ? newPort : link.b.portName
+      const check = checkConnectPorts(switchA, portA, switchB, portB, project.links, link.id)
+      if (!check.ok) {
+        window.alert(check.reason)
+        return
+      }
+      updateLink(link.id, { a: { ...link.a, portName: portA }, b: { ...link.b, portName: portB } })
+    }
+
     return (
       <div className="flex flex-col gap-3 p-3 text-sm">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Link</h3>
-        <div className="text-xs text-slate-400">
-          {switchA?.name} ({link.a.portName}) ↔ {switchB?.name} ({link.b.portName})
+
+        <div className="grid grid-cols-2 gap-2">
+          <label className="flex flex-col gap-1">
+            <span className="truncate text-xs text-slate-400">{switchA?.name ?? '?'} port</span>
+            <select
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100"
+              value={link.a.portName}
+              onChange={(e) => tryUpdatePort('a', e.target.value)}
+            >
+              {optionsA.map(({ port, disabled }) => (
+                <option key={port} value={port} disabled={disabled}>
+                  {port}
+                  {disabled ? ' (in use)' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="truncate text-xs text-slate-400">{switchB?.name ?? '?'} port</span>
+            <select
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100"
+              value={link.b.portName}
+              onChange={(e) => tryUpdatePort('b', e.target.value)}
+            >
+              {optionsB.map(({ port, disabled }) => (
+                <option key={port} value={port} disabled={disabled}>
+                  {port}
+                  {disabled ? ' (in use)' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
+        <p className="-mt-1 text-[10px] text-slate-600">
+          Tip: you can also drag either end of this link on the canvas to rewire it to a different port or switch.
+        </p>
 
         <label className="flex flex-col gap-1">
           <span className="text-xs text-slate-400">Kind</span>
@@ -131,7 +213,7 @@ export function Inspector({ ipPlan }: { ipPlan: IpAllocationResult | null }) {
           >
             {LINK_KINDS.map((k) => (
               <option key={k} value={k}>
-                {k}
+                {LINK_KIND_LABEL[k]}
               </option>
             ))}
           </select>
@@ -159,5 +241,11 @@ export function Inspector({ ipPlan }: { ipPlan: IpAllocationResult | null }) {
 }
 
 function EmptyState() {
-  return <div className="p-3 text-xs text-slate-500">Select a switch or link on the canvas to edit it.</div>
+  return (
+    <EmptyStatePrimitive
+      icon={<MousePointerClick size={22} />}
+      title="Nothing selected"
+      hint="Click a switch or link on the canvas to edit it here."
+    />
+  )
 }

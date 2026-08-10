@@ -1,5 +1,6 @@
-import { BaseEdge, EdgeLabelRenderer, getStraightPath, type EdgeProps, type Edge } from '@xyflow/react'
+import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps, type Edge } from '@xyflow/react'
 import type { LinkKind } from '../../domain/types'
+import { LINK_KIND_COLOR, LINK_KIND_LABEL } from '../../ui/theme'
 
 export type LinkEdgeData = {
   kind: LinkKind
@@ -8,33 +9,39 @@ export type LinkEdgeData = {
 
 export type LinkEdgeType = Edge<LinkEdgeData, 'linkEdge'>
 
-const KIND_COLOR: Record<LinkKind, string> = {
-  'underlay-p2p': '#38bdf8',
-  'vsx-isl': '#f472b6',
-  'vsx-keepalive': '#fbbf24',
-  mgmt: '#94a3b8',
-  unassigned: '#475569',
-}
-
-const KIND_LABEL: Record<LinkKind, string> = {
-  'underlay-p2p': 'underlay',
-  'vsx-isl': 'VSX ISL',
-  'vsx-keepalive': 'VSX keepalive',
-  mgmt: 'mgmt',
-  unassigned: 'link',
-}
-
-export function LinkEdge({ id, sourceX, sourceY, targetX, targetY, data, selected }: EdgeProps<LinkEdgeType>) {
+export function LinkEdge({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  data,
+  selected,
+}: EdgeProps<LinkEdgeType>) {
   const kind = data?.kind ?? 'unassigned'
-  const [edgePath, labelX, labelY] = getStraightPath({ sourceX, sourceY, targetX, targetY })
-  const color = KIND_COLOR[kind]
+  const [edgePath, labelX, labelY] = getBezierPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+    curvature: 0.25,
+  })
+  const color = LINK_KIND_COLOR[kind]
 
   return (
     <>
       <BaseEdge
         id={id}
         path={edgePath}
-        style={{ stroke: color, strokeWidth: selected ? 3 : 2 }}
+        style={{
+          stroke: color,
+          strokeWidth: selected ? 3 : 2,
+          strokeDasharray: kind === 'unassigned' ? '4 3' : undefined,
+        }}
       />
       <EdgeLabelRenderer>
         <div
@@ -42,10 +49,11 @@ export function LinkEdge({ id, sourceX, sourceY, targetX, targetY, data, selecte
             position: 'absolute',
             transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
             pointerEvents: 'none',
+            opacity: selected ? 1 : 0.85,
           }}
-          className="rounded bg-slate-950/90 px-1.5 py-0.5 text-[10px] font-medium text-slate-200 border border-slate-700"
+          className="whitespace-nowrap rounded-full border border-slate-700 bg-slate-950/90 px-2 py-0.5 text-[9px] font-medium tracking-wide text-slate-200 shadow"
         >
-          {data?.label ?? KIND_LABEL[kind]}
+          {data?.label ?? LINK_KIND_LABEL[kind]}
         </div>
       </EdgeLabelRenderer>
     </>

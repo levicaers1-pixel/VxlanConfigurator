@@ -1,44 +1,83 @@
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react'
 import { getCatalogEntry } from '../../domain/catalog'
-import type { SwitchRole } from '../../domain/types'
+import type { LinkKind, SwitchRole } from '../../domain/types'
+import { LINK_KIND_COLOR, ROLE_COLOR, SPEED_COLOR } from '../../ui/theme'
 
 export type SwitchNodeData = {
   catalogId: string
   role: SwitchRole
   name: string
   vsxGroupId?: string
+  /** portName -> kind of the link currently occupying it, for faceplate coloring */
+  portStatus: Record<string, LinkKind>
 }
 
 export type SwitchNodeType = Node<SwitchNodeData, 'switchNode'>
 
-const ROLE_COLOR: Record<SwitchRole, string> = {
-  spine: 'bg-sky-900 border-sky-500 text-sky-100',
-  leaf: 'bg-emerald-900 border-emerald-500 text-emerald-100',
-  border: 'bg-amber-900 border-amber-500 text-amber-100',
-  standalone: 'bg-slate-800 border-slate-500 text-slate-100',
-}
-
-const HANDLE_STYLE = { width: 10, height: 10, background: '#94a3b8' }
+const PORT_STATIC_STYLE = { position: 'static' as const, transform: 'none' }
 
 export function SwitchNode({ data, selected }: NodeProps<SwitchNodeType>) {
   const entry = getCatalogEntry(data.catalogId)
-  const colorClass = ROLE_COLOR[data.role]
+  const colors = ROLE_COLOR[data.role]
 
   return (
     <div
-      className={`rounded-lg border-2 px-4 py-3 shadow-lg min-w-[160px] ${colorClass} ${
-        selected ? 'ring-2 ring-white' : ''
+      className={`rounded-xl border shadow-lg backdrop-blur-sm transition-shadow ${colors.bg} ${colors.border} ${colors.text} ${
+        selected ? 'ring-2 ring-white/80 shadow-white/10' : 'shadow-black/40'
       }`}
+      style={{ minWidth: 168 }}
     >
-      <Handle id="top" type="source" position={Position.Top} style={HANDLE_STYLE} />
-      <Handle id="right" type="source" position={Position.Right} style={HANDLE_STYLE} />
-      <Handle id="bottom" type="source" position={Position.Bottom} style={HANDLE_STYLE} />
-      <Handle id="left" type="source" position={Position.Left} style={HANDLE_STYLE} />
+      <div className="flex items-center justify-between gap-2 border-b border-white/10 px-3 py-1.5">
+        <div className="min-w-0">
+          <div className="text-[9px] font-semibold uppercase tracking-widest opacity-60">{data.role}</div>
+          <div className="truncate text-sm font-semibold leading-tight">{data.name}</div>
+        </div>
+        {data.vsxGroupId && (
+          <span className="shrink-0 rounded-full bg-white/15 px-1.5 py-0.5 text-[9px] font-semibold tracking-wide">
+            VSX
+          </span>
+        )}
+      </div>
 
-      <div className="text-xs uppercase tracking-wide opacity-70">{data.role}</div>
-      <div className="font-semibold">{data.name}</div>
-      <div className="text-xs opacity-80">{entry?.model ?? data.catalogId}</div>
-      {data.vsxGroupId && <div className="mt-1 text-[10px] font-medium text-white/80">VSX paired</div>}
+      <div className="px-3 py-1 text-[10px] opacity-70">{entry?.model ?? data.catalogId}</div>
+
+      <div className="flex flex-col gap-1.5 px-3 pb-3 pt-1">
+        {entry?.portGroups.map((group, gi) => {
+          const ports = Array.from({ length: group.count }, (_, i) => `${group.namePrefix}${group.startIndex + i}`)
+          const speedColor = SPEED_COLOR[group.speedGbps]
+          return (
+            <div key={gi}>
+              <div className="mb-0.5 text-[8px] uppercase tracking-wide opacity-50">
+                {group.count}× {group.speedGbps}G
+              </div>
+              <div className="grid gap-[3px]" style={{ gridTemplateColumns: 'repeat(12, minmax(0, 1fr))' }}>
+                {ports.map((portName) => {
+                  const kind = data.portStatus[portName]
+                  const used = !!kind
+                  return (
+                    <Handle
+                      key={portName}
+                      id={portName}
+                      type="source"
+                      position={Position.Bottom}
+                      title={`${portName} · ${group.speedGbps}G${used ? ` · ${kind}` : ' · free'}`}
+                      style={{
+                        ...PORT_STATIC_STYLE,
+                        width: 9,
+                        height: 9,
+                        borderRadius: 2,
+                        border: `1px solid ${used ? LINK_KIND_COLOR[kind] : speedColor}`,
+                        background: used ? LINK_KIND_COLOR[kind] : 'transparent',
+                      }}
+                      className="!static hover:!scale-125 hover:!brightness-125"
+                    />
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
