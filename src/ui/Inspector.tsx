@@ -1,16 +1,18 @@
+import { useState } from 'react'
 import { MousePointerClick } from 'lucide-react'
 import { useProjectStore } from '../store/useProjectStore'
 import { useSelectionStore } from '../store/useSelectionStore'
 import { getCatalogEntry } from '../domain/catalog'
 import { listPorts } from '../domain/ports'
 import { checkConnectPorts } from '../canvas/linkValidation'
-import type { Link, LinkKind, SwitchInstance, SwitchRole } from '../domain/types'
+import type { HostConnection, HostPortMode, Link, LinkKind, SwitchInstance, SwitchRole } from '../domain/types'
 import type { IpAllocationResult } from '../domain/types'
 import { LINK_KIND_LABEL } from './theme'
 import { EmptyState as EmptyStatePrimitive } from './primitives'
 
 const ROLES: SwitchRole[] = ['spine', 'leaf', 'border', 'access', 'standalone']
 const LINK_KINDS: LinkKind[] = ['underlay-p2p', 'vsx-isl', 'vsx-keepalive', 'mgmt', 'unassigned']
+const inputClass = 'rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100'
 
 function portOptions(sw: SwitchInstance | undefined, links: Link[], currentPort: string, excludeLinkId: string) {
   if (!sw) return []
@@ -26,6 +28,219 @@ function portOptions(sw: SwitchInstance | undefined, links: Link[], currentPort:
       .filter((p): p is string => !!p),
   )
   return listPorts(entry).map((port) => ({ port, disabled: used.has(port) && port !== currentPort }))
+}
+
+function freeHostPorts(
+  sw: SwitchInstance | undefined,
+  links: Link[],
+  hostConnections: HostConnection[],
+  excludeConnId?: string,
+) {
+  if (!sw) return []
+  const entry = getCatalogEntry(sw.catalogId)
+  if (!entry) return []
+  const usedFromLinks = links.flatMap((l) => [
+    l.a.switchInstanceId === sw.id ? l.a.portName : null,
+    l.b.switchInstanceId === sw.id ? l.b.portName : null,
+  ])
+  const usedFromHosts = hostConnections
+    .filter((c) => c.id !== excludeConnId)
+    .flatMap((c) => c.ports.filter((p) => p.switchInstanceId === sw.id).map((p) => p.portName))
+  const used = new Set([...usedFromLinks, ...usedFromHosts].filter((p): p is string => !!p))
+  return listPorts(entry).filter((p) => !used.has(p))
+}
+
+function summarizeHostConnection(conn: HostConnection): string {
+  if (conn.mode === 'access') return `access vlan ${conn.accessVlanId ?? '?'}`
+  const allowed = conn.trunkAllowedVlans
+  const allowedText = !allowed || allowed === 'all' ? 'all' : allowed.join(',')
+  return `trunk native ${conn.trunkNativeVlanId ?? '-'} allowed ${allowedText}`
+}
+
+function HostConnectionsSection({ sw }: { sw: SwitchInstance }) {
+  const project = useProjectStore((s) => s.project)
+  const addHostConnection = useProjectStore((s) => s.addHostConnection)
+  const removeHostConnection = useProjectStore((s) => s.removeHostConnection)
+
+  const [name, setName] = useState('')
+  const [ownPort, setOwnPort] = useState('')
+  const [dualHome, setDualHome] = useState(false)
+  const [partnerPort, setPartnerPort] = useState('')
+  const [mode, setMode] = useState<HostPortMode>('access')
+  const [accessVlanId, setAccessVlanId] = useState('')
+  const [trunkNativeVlanId, setTrunkNativeVlanId] = useState('')
+  const [trunkAllowedMode, setTrunkAllowedMode] = useState<'all' | 'list'>('all')
+  const [trunkAllowedList, setTrunkAllowedList] = useState('')
+
+  if (!project) return null
+
+  const partner = sw.vsxGroupId
+    ? project.switches.find((s) => s.vsxGroupId === sw.vsxGroupId && s.id !== sw.id)
+    : undefined
+
+  const ownFree = freeHostPorts(sw, project.links, project.hostConnections)
+  const partnerFree = freeHostPorts(partner, project.links, project.hostConnections)
+
+  const connections = project.hostConnections.filter((c) => c.ports.some((p) => p.switchInstanceId === sw.id))
+
+  const canSubmit = name.trim() && ownPort && (!dualHome || (partner && partnerPort))
+
+  const submit = () => {
+    if (!canSubmit) return
+    const ports = [{ switchInstanceId: sw.id, portName: ownPort }]
+    if (dualHome && partner) ports.push({ switchInstanceId: partner.id, portName: partnerPort })
+    addHostConnection({
+      name: name.trim(),
+      ports,
+      mode,
+      accessVlanId: mode === 'access' && accessVlanId ? Number(accessVlanId) : undefined,
+      trunkNativeVlanId: mode === 'trunk' && trunkNativeVlanId ? Number(trunkNativeVlanId) : undefined,
+      trunkAllowedVlans:
+        mode === 'trunk' && trunkAllowedMode === 'list'
+          ? trunkAllowedList
+              .split(',')
+              .map((v) => Number(v.trim()))
+              .filter((v) => Number.isFinite(v) && v > 0)
+          : 'all',
+    })
+    setName('')
+    setOwnPort('')
+    setDualHome(false)
+    setPartnerPort('')
+    setAccessVlanId('')
+    setTrunkNativeVlanId('')
+    setTrunkAllowedList('')
+  }
+
+  return (
+    <div className="border-t border-slate-800 pt-2">
+      <span className="text-xs text-slate-400">Host / server connections</span>
+
+      {connections.length > 0 && (
+        <ul className="mt-1 flex flex-col gap-1">
+          {connections.map((conn) => (
+            <li key={conn.id} className="rounded bg-slate-900/60 px-2 py-1 text-xs text-slate-300">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-slate-200">{conn.name}</span>
+                <button className="text-rose-400 hover:text-rose-300" onClick={() => removeHostConnection(conn.id)}>
+                  ×
+                </button>
+              </div>
+              <div className="text-[10px] text-slate-500">
+                {conn.ports
+                  .map((p) => `${project.switches.find((s) => s.id === p.switchInstanceId)?.name ?? '?'}:${p.portName}`)
+                  .join(' + ')}
+                {conn.ports.length === 2 ? ' (MC-LAG)' : ''} · {summarizeHostConnection(conn)}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="mt-2 flex flex-col gap-1.5 rounded border border-slate-800 bg-slate-950/40 p-2">
+        <input
+          className={inputClass}
+          placeholder="Name (e.g. esxi-host-01)"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] text-slate-500">Port on {sw.name}</span>
+          <select className={inputClass} value={ownPort} onChange={(e) => setOwnPort(e.target.value)}>
+            <option value="" disabled>
+              Select port…
+            </option>
+            {ownFree.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {partner && (
+          <label className="flex items-center gap-2 text-[10px] text-slate-400">
+            <input type="checkbox" checked={dualHome} onChange={(e) => setDualHome(e.target.checked)} />
+            Dual-home via MC-LAG to VSX partner ({partner.name})
+          </label>
+        )}
+        {dualHome && partner && (
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] text-slate-500">Port on {partner.name}</span>
+            <select className={inputClass} value={partnerPort} onChange={(e) => setPartnerPort(e.target.value)}>
+              <option value="" disabled>
+                Select port…
+              </option>
+              {partnerFree.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] text-slate-500">Mode</span>
+          <select className={inputClass} value={mode} onChange={(e) => setMode(e.target.value as HostPortMode)}>
+            <option value="access">Access</option>
+            <option value="trunk">Trunk</option>
+          </select>
+        </label>
+
+        {mode === 'access' ? (
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] text-slate-500">Access VLAN ID</span>
+            <input
+              type="number"
+              className={inputClass}
+              value={accessVlanId}
+              onChange={(e) => setAccessVlanId(e.target.value)}
+            />
+          </label>
+        ) : (
+          <>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] text-slate-500">Native VLAN ID (optional)</span>
+              <input
+                type="number"
+                className={inputClass}
+                value={trunkNativeVlanId}
+                onChange={(e) => setTrunkNativeVlanId(e.target.value)}
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] text-slate-500">Allowed VLANs</span>
+              <select
+                className={inputClass}
+                value={trunkAllowedMode}
+                onChange={(e) => setTrunkAllowedMode(e.target.value as 'all' | 'list')}
+              >
+                <option value="all">All</option>
+                <option value="list">Specific list</option>
+              </select>
+            </label>
+            {trunkAllowedMode === 'list' && (
+              <input
+                className={inputClass}
+                placeholder="e.g. 10,20,30"
+                value={trunkAllowedList}
+                onChange={(e) => setTrunkAllowedList(e.target.value)}
+              />
+            )}
+          </>
+        )}
+
+        <button
+          className="mt-1 rounded border border-sky-800 bg-sky-950/50 px-2 py-1 text-xs text-sky-200 hover:bg-sky-950 disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={!canSubmit}
+          onClick={submit}
+        >
+          Add connection
+        </button>
+      </div>
+    </div>
+  )
 }
 
 export function Inspector({ ipPlan }: { ipPlan: IpAllocationResult | null }) {
@@ -141,6 +356,10 @@ export function Inspector({ ipPlan }: { ipPlan: IpAllocationResult | null }) {
             </select>
           )}
         </div>
+
+        {sw.role !== 'access' && !(project.settings.fabricMode === 'evpn' && sw.role === 'spine') && (
+          <HostConnectionsSection sw={sw} />
+        )}
 
         <div className="flex gap-2">
           <button

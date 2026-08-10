@@ -57,6 +57,24 @@ export interface Link {
   ipOverride?: { aIp: string; bIp: string; prefixLen: 31 | 30 }
 }
 
+// ---------- Host-facing access ports (server/end-host connections) ----------
+
+export type HostPortMode = 'access' | 'trunk'
+
+export interface HostConnection {
+  id: string
+  name: string
+  /** 1 port = single-homed; 2 ports = MC-LAG dual-homed across a VSX pair. */
+  ports: PortRef[]
+  mode: HostPortMode
+  /** VLAN ID for access mode. */
+  accessVlanId?: number
+  /** Native VLAN for trunk mode (untagged traffic). */
+  trunkNativeVlanId?: number
+  /** Allowed VLANs for trunk mode — 'all' or an explicit list of VLAN IDs. */
+  trunkAllowedVlans?: 'all' | number[]
+}
+
 // ---------- VLAN / VNI overlay model ----------
 
 export interface TenantVrf {
@@ -116,6 +134,22 @@ export interface ProjectSettings {
   }
   routeTargetAsn?: number
   jumboMtu: boolean
+
+  /** Day-1 baseline config applied to every switch regardless of role. */
+  baseline: {
+    ntpServers: string[]
+    syslogServers: string[]
+    aaaLocalFallback: boolean
+    bannerText?: string
+  }
+
+  /**
+   * MD5 auth password applied to every generated `neighbor ... remote-as`
+   * statement (underlay and EVPN overlay peerings alike). Stored and
+   * rendered in plaintext — this is a config generator, not a secrets
+   * manager, so treat the saved project file and generated CLI as sensitive.
+   */
+  bgpAuthPassword?: string
 }
 
 // ---------- Whole project (the JSON save/load unit) ----------
@@ -130,6 +164,7 @@ export interface Project {
   links: Link[]
   vlans: VlanMapping[]
   vrfs: TenantVrf[]
+  hostConnections: HostConnection[]
 }
 
 // ---------- Derived (NOT persisted — recomputed from Project) ----------
@@ -153,5 +188,7 @@ export interface IpAllocationResult {
   l2Vnis: Record<string, number>
   l3Vnis: Record<string, number>
   asns: Record<string, number>
+  /** LAG interface ID for dual-homed (2-port) host connections, keyed by HostConnection id. Globally unique. */
+  hostLagIds: Record<string, number>
   errors: AllocationError[]
 }

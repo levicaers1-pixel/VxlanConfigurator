@@ -30,6 +30,7 @@ export const underlayBgp: SectionBuilder = (ctx, out) => {
     b.line('maximum-paths 8')
     b.blank()
 
+    const authPassword = ctx.project.settings.bgpAuthPassword
     for (const link of underlayLinks) {
       const peer = peerSwitch(ctx, link)
       const ip = ownAndPeerIp(ctx, link)
@@ -37,6 +38,7 @@ export const underlayBgp: SectionBuilder = (ctx, out) => {
       if (!ip || peerAsn === undefined) continue
       b.line(`neighbor ${ip.peerIp} remote-as ${peerAsn}`)
       b.line(`neighbor ${ip.peerIp} description ${peer?.name ?? 'unknown'}`)
+      if (authPassword) b.line(`neighbor ${ip.peerIp} password plaintext ${authPassword}`)
     }
 
     b.blank()

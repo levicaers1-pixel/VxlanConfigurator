@@ -19,6 +19,7 @@ function baseSettings(overrides: Partial<Project['settings']> = {}): Project['se
     tenantSubnetPrefixLen: 24,
     vniAllocation: { l2VniStrategy: 'vlan-plus-offset', l2VniOffset: 10000, l3VniPoolStart: 100000 },
     jumboMtu: true,
+    baseline: { ntpServers: [], syslogServers: [], aaaLocalFallback: true },
     ...overrides,
   }
 }
@@ -61,6 +62,7 @@ function buildFixture(settingsOverrides: Partial<Project['settings']> = {}) {
     links,
     vlans,
     vrfs,
+    hostConnections: [],
   }
   const ipPlan = computeIpPlan(project)
   return { project, ipPlan }
@@ -140,6 +142,7 @@ describe('generateSwitchConfig — access role', () => {
       links: [link('l1', 'access1', '1/1/49', 'leaf1', '1/1/1', 'unassigned')],
       vlans: [],
       vrfs: [],
+      hostConnections: [],
     }
     const ipPlan = computeIpPlan(project)
     const config = generateSwitchConfig('access1', project, ipPlan)
@@ -166,6 +169,7 @@ describe('generateSwitchConfig — access role', () => {
       links: [],
       vlans: [],
       vrfs: [],
+      hostConnections: [],
     }
     const ipPlan = computeIpPlan(project)
     expect(ipPlan.loopbacks.access1).toBeUndefined()
@@ -227,5 +231,151 @@ describe('generateSwitchConfig — static VXLAN (no EVPN)', () => {
     expect(leaf).toContain('No remote VTEP peers found')
     expect(spine).not.toContain('vlan 10')
     expect(spine).not.toContain('interface vxlan')
+  })
+})
+
+describe('generateSwitchConfig — day-1 baseline', () => {
+  it('emits NTP, syslog, AAA, and banner on every switch, spine included', () => {
+    const { project, ipPlan } = buildFixture({
+      baseline: {
+        ntpServers: ['10.0.100.1', '10.0.100.2'],
+        syslogServers: ['10.0.100.10'],
+        aaaLocalFallback: true,
+        bannerText: 'Authorized access only\nAll activity is logged.',
+      },
+    })
+    const spine = generateSwitchConfig('spine1', project, ipPlan)
+    const leaf = generateSwitchConfig('leaf1', project, ipPlan)
+
+    for (const config of [spine, leaf]) {
+      expect(config).toContain('ntp server 10.0.100.1 iburst')
+      expect(config).toContain('ntp server 10.0.100.2 iburst')
+      expect(config).toContain('logging 10.0.100.10')
+      expect(config).toContain('aaa authentication login default local')
+      expect(config).toContain('banner motd ^')
+      expect(config).toContain('Authorized access only')
+      expect(config).toContain('All activity is logged.')
+    }
+  })
+
+  it('omits AAA fallback and banner when unset', () => {
+    const { project, ipPlan } = buildFixture()
+    const config = generateSwitchConfig('leaf1', project, ipPlan)
+    expect(config).toContain('aaa authentication login default local')
+    expect(config).not.toContain('banner motd')
+  })
+
+  it('with AAA fallback disabled and no servers, emits nothing', () => {
+    const { project, ipPlan } = buildFixture({
+      baseline: { ntpServers: [], syslogServers: [], aaaLocalFallback: false },
+    })
+    const config = generateSwitchConfig('spine1', project, ipPlan)
+    expect(config).not.toContain('ntp server')
+    expect(config).not.toContain('logging ')
+    expect(config).not.toContain('aaa authentication login default local')
+  })
+})
+
+describe('generateSwitchConfig — BGP MD5 authentication', () => {
+  it('adds a password line to every underlay eBGP neighbor when set', () => {
+    const { project, ipPlan } = buildFixture({ bgpAuthPassword: 'S3cr3t!' })
+    const config = generateSwitchConfig('leaf1', project, ipPlan)
+    const neighborLines = config.split('\n').filter((l) => l.trim().startsWith('neighbor') && l.includes('remote-as'))
+    const passwordLines = config.split('\n').filter((l) => l.includes('password plaintext S3cr3t!'))
+    expect(neighborLines.length).toBeGreaterThan(0)
+    expect(passwordLines.length).toBe(neighborLines.length)
+  })
+
+  it('adds password lines to OSPF-underlay EVPN multihop peerings too', () => {
+    const { project, ipPlan } = buildFixture({ underlayProtocol: 'ospf', bgpAuthPassword: 'S3cr3t!' })
+    const leaf = generateSwitchConfig('leaf1', project, ipPlan)
+    const spine = generateSwitchConfig('spine1', project, ipPlan)
+    expect(leaf).toContain('password plaintext S3cr3t!')
+    expect(spine).toContain('password plaintext S3cr3t!')
+  })
+
+  it('omits password lines entirely when unset', () => {
+    const { project, ipPlan } = buildFixture()
+    const config = generateSwitchConfig('leaf1', project, ipPlan)
+    expect(config).not.toContain('password plaintext')
+  })
+})
+
+describe('generateSwitchConfig — host/server access ports', () => {
+  it('single-homed host port: plain interface with vlan config, no LAG', () => {
+    const { project: base } = buildFixture()
+    const project: Project = {
+      ...base,
+      hostConnections: [
+        {
+          id: 'h1',
+          name: 'web-01',
+          ports: [{ switchInstanceId: 'leaf1', portName: '1/1/1' }],
+          mode: 'access',
+          accessVlanId: 10,
+        },
+      ],
+    }
+    const ipPlan = computeIpPlan(project)
+    const config = generateSwitchConfig('leaf1', project, ipPlan)
+
+    expect(config).toContain('interface 1/1/1')
+    expect(config).toContain('description host-web-01')
+    expect(config).toContain('vlan access 10')
+    expect(ipPlan.hostLagIds['h1']).toBeUndefined()
+  })
+
+  it('dual-homed host port: member ports reference a shared LAG, LAG carries vlan config + LACP active', () => {
+    const { project: base } = buildFixture()
+    const project: Project = {
+      ...base,
+      hostConnections: [
+        {
+          id: 'h1',
+          name: 'esxi-01',
+          ports: [
+            { switchInstanceId: 'leaf1', portName: '1/1/1' },
+            { switchInstanceId: 'leaf2', portName: '1/1/1' },
+          ],
+          mode: 'trunk',
+          trunkNativeVlanId: 1,
+          trunkAllowedVlans: [10, 20],
+        },
+      ],
+    }
+    const ipPlan = computeIpPlan(project)
+    const lagId = ipPlan.hostLagIds['h1']
+    expect(lagId).toBeDefined()
+
+    const leaf1Config = generateSwitchConfig('leaf1', project, ipPlan)
+    const leaf2Config = generateSwitchConfig('leaf2', project, ipPlan)
+
+    for (const config of [leaf1Config, leaf2Config]) {
+      expect(config).toContain(`lag ${lagId}`)
+      expect(config).toContain(`interface lag ${lagId}`)
+      expect(config).toContain('description host-esxi-01')
+      expect(config).toContain('vlan trunk native 1')
+      expect(config).toContain('vlan trunk allowed 10,20')
+      expect(config).toContain('lacp mode active')
+    }
+  })
+
+  it('a host connection touching only leaf1 does not appear in leaf2s config', () => {
+    const { project: base } = buildFixture()
+    const project: Project = {
+      ...base,
+      hostConnections: [
+        {
+          id: 'h1',
+          name: 'web-01',
+          ports: [{ switchInstanceId: 'leaf1', portName: '1/1/1' }],
+          mode: 'access',
+          accessVlanId: 10,
+        },
+      ],
+    }
+    const ipPlan = computeIpPlan(project)
+    const leaf2Config = generateSwitchConfig('leaf2', project, ipPlan)
+    expect(leaf2Config).not.toContain('host-web-01')
   })
 })

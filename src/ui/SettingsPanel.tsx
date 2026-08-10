@@ -1,16 +1,24 @@
 import { useProjectStore } from '../store/useProjectStore'
 import type { AsnScheme, UnderlayProtocol, VniStrategy } from '../domain/types'
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
       <span className="text-xs text-slate-400">{label}</span>
       {children}
+      {hint && <span className="text-[10px] text-slate-600">{hint}</span>}
     </label>
   )
 }
 
 const inputClass = 'rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100'
+
+function parseServerList(text: string): string[] {
+  return text
+    .split(/[\n,]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
 
 export function SettingsPanel() {
   const project = useProjectStore((s) => s.project)
@@ -173,6 +181,66 @@ export function SettingsPanel() {
                 vniAllocation: { ...settings.vniAllocation, l3VniPoolStart: Number(e.target.value) },
               })
             }
+          />
+        </Field>
+      </section>
+
+      <section className="flex flex-col gap-2 border-t border-slate-800 pt-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Day-1 baseline</h3>
+        <p className="-mt-1 text-[10px] text-slate-600">Applied to every switch, regardless of role.</p>
+        <Field label="NTP servers" hint="One per line or comma-separated">
+          <textarea
+            rows={2}
+            className={inputClass}
+            value={settings.baseline.ntpServers.join('\n')}
+            onChange={(e) =>
+              updateSettings({ baseline: { ...settings.baseline, ntpServers: parseServerList(e.target.value) } })
+            }
+          />
+        </Field>
+        <Field label="Syslog servers" hint="One per line or comma-separated">
+          <textarea
+            rows={2}
+            className={inputClass}
+            value={settings.baseline.syslogServers.join('\n')}
+            onChange={(e) =>
+              updateSettings({ baseline: { ...settings.baseline, syslogServers: parseServerList(e.target.value) } })
+            }
+          />
+        </Field>
+        <label className="flex items-center gap-2 text-xs text-slate-300">
+          <input
+            type="checkbox"
+            checked={settings.baseline.aaaLocalFallback}
+            onChange={(e) =>
+              updateSettings({ baseline: { ...settings.baseline, aaaLocalFallback: e.target.checked } })
+            }
+          />
+          Explicit local AAA fallback (aaa authentication login default local)
+        </label>
+        <Field label="Login banner (MOTD)" hint="Shown before login. Leave blank to skip.">
+          <textarea
+            rows={2}
+            className={inputClass}
+            value={settings.baseline.bannerText ?? ''}
+            onChange={(e) =>
+              updateSettings({ baseline: { ...settings.baseline, bannerText: e.target.value || undefined } })
+            }
+          />
+        </Field>
+      </section>
+
+      <section className="flex flex-col gap-2 border-t border-slate-800 pt-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">BGP security</h3>
+        <Field
+          label="MD5 auth password"
+          hint="Applied to every generated BGP neighbor. Stored and shown in plaintext — treat the save file and generated CLI as sensitive."
+        >
+          <input
+            className={inputClass}
+            placeholder="none"
+            value={settings.bgpAuthPassword ?? ''}
+            onChange={(e) => updateSettings({ bgpAuthPassword: e.target.value || undefined })}
           />
         </Field>
       </section>

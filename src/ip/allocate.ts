@@ -290,6 +290,20 @@ export function computeIpPlan(project: Project): IpAllocationResult {
     }
   }
 
+  // ---------- Host connection LAG IDs (dual-homed / MC-LAG only) ----------
+  // Globally unique (not per-switch) so the same numeric ID is safe to reuse
+  // verbatim on both VSX peers of a dual-homed connection without collision
+  // against any other switch's host LAGs.
+  const hostLagIds: Record<string, number> = {}
+  {
+    let cursor = 1
+    for (const conn of project.hostConnections) {
+      if (conn.ports.length < 2) continue
+      hostLagIds[conn.id] = cursor
+      cursor += 1
+    }
+  }
+
   return {
     underlayLinkIps,
     loopbacks,
@@ -300,6 +314,7 @@ export function computeIpPlan(project: Project): IpAllocationResult {
     l2Vnis,
     l3Vnis,
     asns,
+    hostLagIds,
     errors,
   }
 }

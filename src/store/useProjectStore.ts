@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { v4 as uuidv4 } from 'uuid'
 import type {
   FabricMode,
+  HostConnection,
   Link,
   LinkKind,
   Project,
@@ -34,6 +35,11 @@ function defaultSettings(fabricMode: FabricMode): ProjectSettings {
       l3VniPoolStart: 100000,
     },
     jumboMtu: true,
+    baseline: {
+      ntpServers: [],
+      syslogServers: [],
+      aaaLocalFallback: true,
+    },
   }
 }
 
@@ -49,6 +55,7 @@ export function newProject(fabricMode: FabricMode): Project {
     links: [],
     vlans: [],
     vrfs: [],
+    hostConnections: [],
   }
 }
 
@@ -87,6 +94,10 @@ interface ProjectStore {
   addVrf: (vrf: Omit<TenantVrf, 'id'>) => string
   updateVrf: (id: string, patch: Partial<TenantVrf>) => void
   removeVrf: (id: string) => void
+
+  addHostConnection: (conn: Omit<HostConnection, 'id'>) => string
+  updateHostConnection: (id: string, patch: Partial<HostConnection>) => void
+  removeHostConnection: (id: string) => void
 }
 
 function touch(project: Project): Project {
@@ -155,6 +166,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         ...project,
         switches: project.switches.filter((s) => s.id !== id),
         links: project.links.filter((l) => l.a.switchInstanceId !== id && l.b.switchInstanceId !== id),
+        hostConnections: project.hostConnections.filter((h) => !h.ports.some((p) => p.switchInstanceId === id)),
       })),
 
     duplicateSwitch: (id, offset = { x: 40, y: 40 }) => {
@@ -241,5 +253,23 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
       mutate((project) => ({ ...project, vrfs: project.vrfs.map((v) => (v.id === id ? { ...v, ...patch } : v)) })),
 
     removeVrf: (id) => mutate((project) => ({ ...project, vrfs: project.vrfs.filter((v) => v.id !== id) })),
+
+    addHostConnection: (conn) => {
+      const id = uuidv4()
+      mutate((project) => ({ ...project, hostConnections: [...project.hostConnections, { id, ...conn }] }))
+      return id
+    },
+
+    updateHostConnection: (id, patch) =>
+      mutate((project) => ({
+        ...project,
+        hostConnections: project.hostConnections.map((h) => (h.id === id ? { ...h, ...patch } : h)),
+      })),
+
+    removeHostConnection: (id) =>
+      mutate((project) => ({
+        ...project,
+        hostConnections: project.hostConnections.filter((h) => h.id !== id),
+      })),
   }
 })

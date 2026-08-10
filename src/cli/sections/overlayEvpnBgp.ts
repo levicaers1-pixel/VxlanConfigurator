@@ -17,6 +17,7 @@ export const overlayEvpnBgp: SectionBuilder = (ctx, out) => {
   if (asn === undefined || !loopback) return
 
   const spines = ctx.project.switches.filter((s) => s.role === 'spine')
+  const authPassword = ctx.project.settings.bgpAuthPassword
 
   out.block(`router bgp ${asn}`, (b) => {
     b.line(`bgp router-id ${loopback}`)
@@ -28,6 +29,7 @@ export const overlayEvpnBgp: SectionBuilder = (ctx, out) => {
       b.line(`neighbor ${spineLoopback} description ${spine.name}`)
       b.line(`neighbor ${spineLoopback} ebgp-multihop 3`)
       b.line(`neighbor ${spineLoopback} update-source loopback ${LOOPBACK_ID}`)
+      if (authPassword) b.line(`neighbor ${spineLoopback} password plaintext ${authPassword}`)
     }
     b.blank()
     b.block('address-family l2vpn evpn', (ab) => {

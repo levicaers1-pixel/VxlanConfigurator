@@ -22,6 +22,7 @@ function baseSettings(overrides: Partial<Project['settings']> = {}): Project['se
       l3VniPoolStart: 100000,
     },
     jumboMtu: true,
+    baseline: { ntpServers: [], syslogServers: [], aaaLocalFallback: true },
     ...overrides,
   }
 }
@@ -58,6 +59,7 @@ function baseProject(overrides: Partial<Project> = {}): Project {
     links: [],
     vlans: [],
     vrfs: [],
+    hostConnections: [],
     ...overrides,
   }
 }
@@ -221,6 +223,50 @@ describe('computeIpPlan — access role exclusion', () => {
     expect(result.asns.access1).toBeUndefined()
     expect(result.loopbacks.spine1).toBe('10.255.0.0')
     expect(result.asns.spine1).toBe(65001)
+  })
+})
+
+describe('computeIpPlan — host connection LAG IDs', () => {
+  it('assigns a globally unique LAG ID only to dual-homed (2-port) host connections, in project order', () => {
+    const leaf1 = sw('leaf1', 'leaf', 1, 'vsxA')
+    const leaf2 = sw('leaf2', 'leaf', 2, 'vsxA')
+    const project = baseProject({
+      switches: [leaf1, leaf2],
+      hostConnections: [
+        {
+          id: 'h1',
+          name: 'single',
+          ports: [{ switchInstanceId: 'leaf1', portName: '1/1/1' }],
+          mode: 'access',
+          accessVlanId: 10,
+        },
+        {
+          id: 'h2',
+          name: 'dual-a',
+          ports: [
+            { switchInstanceId: 'leaf1', portName: '1/1/2' },
+            { switchInstanceId: 'leaf2', portName: '1/1/2' },
+          ],
+          mode: 'access',
+          accessVlanId: 10,
+        },
+        {
+          id: 'h3',
+          name: 'dual-b',
+          ports: [
+            { switchInstanceId: 'leaf1', portName: '1/1/3' },
+            { switchInstanceId: 'leaf2', portName: '1/1/3' },
+          ],
+          mode: 'access',
+          accessVlanId: 20,
+        },
+      ],
+    })
+    const result = computeIpPlan(project)
+
+    expect(result.hostLagIds.h1).toBeUndefined()
+    expect(result.hostLagIds.h2).toBe(1)
+    expect(result.hostLagIds.h3).toBe(2)
   })
 })
 

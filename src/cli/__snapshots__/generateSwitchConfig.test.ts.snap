@@ -3,6 +3,8 @@
 exports[`generateSwitchConfig — EVPN, OSPF underlay > generates a leaf config with OSPF underlay + multihop EVPN peering (golden) 1`] = `
 "hostname LEAF1
 
+aaa authentication login default local
+
 interface mgmt
     no shutdown
     ip static 192.168.1.4/24
@@ -120,6 +122,8 @@ interface vxlan 1
 exports[`generateSwitchConfig — EVPN, OSPF underlay > generates a spine config with OSPF + route-reflector EVPN peering (golden) 1`] = `
 "hostname SPINE1
 
+aaa authentication login default local
+
 interface mgmt
     no shutdown
     ip static 192.168.1.2/24
@@ -170,6 +174,8 @@ router bgp 65001
 
 exports[`generateSwitchConfig — EVPN, eBGP underlay > generates a VSX leaf config (golden) 1`] = `
 "hostname LEAF1
+
+aaa authentication login default local
 
 interface mgmt
     no shutdown
@@ -283,6 +289,8 @@ interface vxlan 1
 exports[`generateSwitchConfig — EVPN, eBGP underlay > generates a spine config (golden) 1`] = `
 "hostname SPINE1
 
+aaa authentication login default local
+
 interface mgmt
     no shutdown
     ip static 192.168.1.2/24
@@ -328,6 +336,8 @@ router bgp 65001
 
 exports[`generateSwitchConfig — static VXLAN (no EVPN) > generates a VSX leaf config with static remote-VTEP flood lists (golden) 1`] = `
 "hostname LEAF1
+
+aaa authentication login default local
 
 interface mgmt
     no shutdown
@@ -421,6 +431,8 @@ interface vxlan 1
 
 exports[`generateSwitchConfig — static VXLAN (no EVPN) > generates a spine-role switch config too — static mode uses one recipe for every role 1`] = `
 "hostname SPINE1
+
+aaa authentication login default local
 
 interface mgmt
     no shutdown

@@ -49,7 +49,24 @@ const tenantVrfSchema = z.object({
   exportRouteTargets: z.array(z.string()).optional(),
 })
 
+const hostConnectionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  ports: z.array(portRefSchema).min(1).max(2),
+  mode: z.enum(['access', 'trunk']),
+  accessVlanId: z.number().optional(),
+  trunkNativeVlanId: z.number().optional(),
+  trunkAllowedVlans: z.union([z.literal('all'), z.array(z.number())]).optional(),
+})
+
 const ipPoolSchema = z.object({ supernet: z.string(), description: z.string().optional() })
+
+const baselineSchema = z.object({
+  ntpServers: z.array(z.string()).default([]),
+  syslogServers: z.array(z.string()).default([]),
+  aaaLocalFallback: z.boolean().default(true),
+  bannerText: z.string().optional(),
+})
 
 const projectSettingsSchema = z.object({
   fabricMode: z.enum(['static-vxlan', 'evpn']),
@@ -73,6 +90,8 @@ const projectSettingsSchema = z.object({
   }),
   routeTargetAsn: z.number().optional(),
   jumboMtu: z.boolean(),
+  baseline: baselineSchema.default({ ntpServers: [], syslogServers: [], aaaLocalFallback: true }),
+  bgpAuthPassword: z.string().optional(),
 })
 
 export const projectSchema = z.object({
@@ -85,6 +104,7 @@ export const projectSchema = z.object({
   links: z.array(linkSchema),
   vlans: z.array(vlanMappingSchema),
   vrfs: z.array(tenantVrfSchema),
+  hostConnections: z.array(hostConnectionSchema).default([]),
 })
 
 export type ProjectSchemaType = z.infer<typeof projectSchema>

@@ -13,6 +13,7 @@ export function useIpPlan(): IpAllocationResult | null {
         vlans: project.vlans,
         vrfs: project.vrfs,
         settings: project.settings,
+        hostConnections: project.hostConnections,
       })
     : null
 

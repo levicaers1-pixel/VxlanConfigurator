@@ -15,6 +15,7 @@ export const spineEvpnRouteReflector: SectionBuilder = (ctx, out) => {
   if (asn === undefined || !loopback) return
 
   const leaves = ctx.project.switches.filter((s) => s.role === 'leaf')
+  const authPassword = ctx.project.settings.bgpAuthPassword
 
   out.block(`router bgp ${asn}`, (b) => {
     b.line(`bgp router-id ${loopback}`)
@@ -26,6 +27,7 @@ export const spineEvpnRouteReflector: SectionBuilder = (ctx, out) => {
       b.line(`neighbor ${leafLoopback} description ${leaf.name}`)
       b.line(`neighbor ${leafLoopback} ebgp-multihop 3`)
       b.line(`neighbor ${leafLoopback} update-source loopback ${LOOPBACK_ID}`)
+      if (authPassword) b.line(`neighbor ${leafLoopback} password plaintext ${authPassword}`)
     }
     b.blank()
     b.block('address-family l2vpn evpn', (ab) => {
