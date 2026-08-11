@@ -1,5 +1,5 @@
 import { getCatalogEntry } from '../domain/catalog'
-import type { Link, SwitchInstance } from '../domain/types'
+import type { Link, SwitchCatalogEntry, SwitchInstance } from '../domain/types'
 
 export interface ConnectCheck {
   ok: boolean
@@ -26,12 +26,13 @@ export function checkConnectPorts(
   portB: string,
   links: Link[],
   excludeLinkId?: string,
+  customEntries: SwitchCatalogEntry[] = [],
 ): ConnectCheck {
   if (switchA.id === switchB.id && portA === portB) {
     return { ok: false, reason: 'Cannot link a port to itself' }
   }
-  const entryA = getCatalogEntry(switchA.catalogId)
-  const entryB = getCatalogEntry(switchB.catalogId)
+  const entryA = getCatalogEntry(switchA.catalogId, customEntries)
+  const entryB = getCatalogEntry(switchB.catalogId, customEntries)
   if (!entryA || !entryB) {
     return { ok: false, reason: 'Unknown switch catalog entry' }
   }

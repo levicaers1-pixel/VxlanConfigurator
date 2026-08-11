@@ -39,9 +39,14 @@ function extractLabel(shapeEl: Element): string {
  * matcher and the review UI have a shot at the real part number even when
  * the visible text doesn't mention it.
  */
-function withMasterSku(text: string, shapeEl: Element): string {
+function shapeSku(shapeEl: Element): string | undefined {
   const sku = shapeEl.getAttribute('NameU')
-  if (!sku || sku === 'Dynamic connector') return text
+  return sku && sku !== 'Dynamic connector' ? sku : undefined
+}
+
+function withMasterSku(text: string, shapeEl: Element): string {
+  const sku = shapeSku(shapeEl)
+  if (!sku) return text
   if (!text) return sku
   return text.toUpperCase().includes(sku.toUpperCase()) ? text : `${text} [${sku}]`
 }
@@ -183,7 +188,7 @@ export async function parseVsdxFile(data: ArrayBuffer): Promise<ParsedDiagram> {
     const xIn = toInches(cellValue(shapeEl, 'PinX'), unitHint)
     const yIn = toInches(cellValue(shapeEl, 'PinY'), unitHint)
     const label = extractLabel(shapeEl)
-    shapes.push({ id, label, xIn, yIn })
+    shapes.push({ id, label, sku: shapeSku(shapeEl), xIn, yIn })
   }
 
   return { shapes, connectors, pageWidthIn, pageHeightIn, truncatedToFirstPage: multiple }

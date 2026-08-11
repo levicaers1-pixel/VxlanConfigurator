@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { defaultCatalogIdForRole, deriveDeviceName, matchShapeToCatalog } from './matchCatalog'
+import {
+  defaultCatalogIdForRole,
+  deriveDeviceName,
+  deriveModelName,
+  matchShapeToCatalog,
+  synthesizeCatalogEntry,
+} from './matchCatalog'
 
 describe('matchShapeToCatalog', () => {
   it('matches a full model string embedded in a multi-line label, high confidence', () => {
@@ -27,10 +33,13 @@ describe('matchShapeToCatalog', () => {
     expect(result.confidence).toBe('low')
   })
 
-  it('falls back to standalone when nothing matches and no role keyword is present', () => {
+  it('falls back to access (the safe default) when nothing matches and no role keyword is present', () => {
+    // 'standalone' gets the full EVPN/VXLAN fabric recipe in CLI generation — defaulting
+    // an unidentified device there would fabricate meaningless config. 'access' only
+    // generates hostname/mgmt/trunk config, which is safe for hardware we know nothing about.
     const result = matchShapeToCatalog('Unlabeled Box')
     expect(result.entry).toBeUndefined()
-    expect(result.role).toBe('standalone')
+    expect(result.role).toBe('access')
     expect(result.confidence).toBe('low')
   })
 
@@ -57,5 +66,47 @@ describe('deriveDeviceName', () => {
   it('returns undefined when every line is just the model string', () => {
     const result = matchShapeToCatalog('8325-32C')
     expect(deriveDeviceName('8325-32C', result.entry)).toBeUndefined()
+  })
+})
+
+describe('deriveModelName', () => {
+  it('strips the bracketed SKU suffix and a trailing instance number', () => {
+    expect(deriveModelName('HPE ANW 2930M 48G PoE+ 1-slot Switch #5 [JL322A]')).toBe(
+      'HPE ANW 2930M 48G PoE+ 1-slot Switch',
+    )
+  })
+
+  it('leaves a plain label unchanged', () => {
+    expect(deriveModelName('Core switch')).toBe('Core switch')
+  })
+})
+
+describe('synthesizeCatalogEntry', () => {
+  it('builds a custom, clearly-flagged catalog entry from a label and SKU', () => {
+    const entry = synthesizeCatalogEntry('HPE ANW 2930M 48G PoE+ 1-slot Switch #5 [JL322A]', 'JL322A', 'access')
+    expect(entry.custom).toBe(true)
+    expect(entry.vendor).toBe('Custom')
+    expect(entry.supportsVsx).toBe(false)
+    expect(entry.supportsEvpn).toBe(false)
+    expect(entry.suitableRoles).toEqual(['access'])
+    expect(entry.model).toContain('2930M')
+    expect(entry.portGroups[0].count).toBe(48)
+  })
+
+  it('produces the same id for the same SKU so instances of one real model share one catalog entry', () => {
+    const a = synthesizeCatalogEntry('HPE ANW 2930M 48G PoE+ 1-slot Switch #5 [JL322A]', 'JL322A', 'access')
+    const b = synthesizeCatalogEntry('HPE ANW 2930M 48G PoE+ 1-slot Switch #7 [JL322A]', 'JL322A', 'access')
+    expect(a.id).toBe(b.id)
+  })
+
+  it('produces different ids for different SKUs', () => {
+    const a = synthesizeCatalogEntry('Switch A [JL322A]', 'JL322A', 'access')
+    const b = synthesizeCatalogEntry('Switch B [JL679A]', 'JL679A', 'access')
+    expect(a.id).not.toBe(b.id)
+  })
+
+  it('falls back to a generic port count when nothing in the label hints at one', () => {
+    const entry = synthesizeCatalogEntry('Some Mystery Switch', undefined, 'standalone')
+    expect(entry.portGroups[0].count).toBe(24)
   })
 })

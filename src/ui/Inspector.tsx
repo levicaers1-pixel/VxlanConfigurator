@@ -5,7 +5,15 @@ import { useSelectionStore } from '../store/useSelectionStore'
 import { getCatalogEntry } from '../domain/catalog'
 import { listPorts } from '../domain/ports'
 import { checkConnectPorts } from '../canvas/linkValidation'
-import type { HostConnection, HostPortMode, Link, LinkKind, SwitchInstance, SwitchRole } from '../domain/types'
+import type {
+  HostConnection,
+  HostPortMode,
+  Link,
+  LinkKind,
+  SwitchCatalogEntry,
+  SwitchInstance,
+  SwitchRole,
+} from '../domain/types'
 import type { IpAllocationResult } from '../domain/types'
 import { LINK_KIND_LABEL } from './theme'
 import { EmptyState as EmptyStatePrimitive } from './primitives'
@@ -14,9 +22,15 @@ const ROLES: SwitchRole[] = ['spine', 'leaf', 'border', 'access', 'standalone']
 const LINK_KINDS: LinkKind[] = ['underlay-p2p', 'vsx-isl', 'vsx-keepalive', 'mgmt', 'unassigned']
 const inputClass = 'rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100'
 
-function portOptions(sw: SwitchInstance | undefined, links: Link[], currentPort: string, excludeLinkId: string) {
+function portOptions(
+  sw: SwitchInstance | undefined,
+  links: Link[],
+  currentPort: string,
+  excludeLinkId: string,
+  customEntries: SwitchCatalogEntry[],
+) {
   if (!sw) return []
-  const entry = getCatalogEntry(sw.catalogId)
+  const entry = getCatalogEntry(sw.catalogId, customEntries)
   if (!entry) return []
   const used = new Set(
     links
@@ -34,10 +48,11 @@ function freeHostPorts(
   sw: SwitchInstance | undefined,
   links: Link[],
   hostConnections: HostConnection[],
+  customEntries: SwitchCatalogEntry[],
   excludeConnId?: string,
 ) {
   if (!sw) return []
-  const entry = getCatalogEntry(sw.catalogId)
+  const entry = getCatalogEntry(sw.catalogId, customEntries)
   if (!entry) return []
   const usedFromLinks = links.flatMap((l) => [
     l.a.switchInstanceId === sw.id ? l.a.portName : null,
@@ -78,8 +93,8 @@ function HostConnectionsSection({ sw }: { sw: SwitchInstance }) {
     ? project.switches.find((s) => s.vsxGroupId === sw.vsxGroupId && s.id !== sw.id)
     : undefined
 
-  const ownFree = freeHostPorts(sw, project.links, project.hostConnections)
-  const partnerFree = freeHostPorts(partner, project.links, project.hostConnections)
+  const ownFree = freeHostPorts(sw, project.links, project.hostConnections, project.customCatalogEntries)
+  const partnerFree = freeHostPorts(partner, project.links, project.hostConnections, project.customCatalogEntries)
 
   const connections = project.hostConnections.filter((c) => c.ports.some((p) => p.switchInstanceId === sw.id))
 
@@ -261,7 +276,7 @@ export function Inspector({ ipPlan }: { ipPlan: IpAllocationResult | null }) {
   if (selectedNodeId) {
     const sw = project.switches.find((s) => s.id === selectedNodeId)
     if (!sw) return <EmptyState />
-    const entry = getCatalogEntry(sw.catalogId)
+    const entry = getCatalogEntry(sw.catalogId, project.customCatalogEntries)
     const otherSwitches = project.switches.filter((s) => s.id !== sw.id && !s.vsxGroupId)
     const loopback = ipPlan?.loopbacks[sw.id]
     const asn = ipPlan?.asns[sw.id]
@@ -297,6 +312,7 @@ export function Inspector({ ipPlan }: { ipPlan: IpAllocationResult | null }) {
 
         <div className="text-xs text-slate-500">
           Model: {entry?.model ?? sw.catalogId}
+          {entry?.custom && <span className="ml-1 text-amber-400">(unverified, from import)</span>}
           <br />
           VSX capable: {entry?.supportsVsx ? 'yes' : 'no'}
         </div>
@@ -389,14 +405,14 @@ export function Inspector({ ipPlan }: { ipPlan: IpAllocationResult | null }) {
     const switchB = project.switches.find((s) => s.id === link.b.switchInstanceId)
     const ip = ipPlan?.underlayLinkIps[link.id]
 
-    const optionsA = portOptions(switchA, project.links, link.a.portName, link.id)
-    const optionsB = portOptions(switchB, project.links, link.b.portName, link.id)
+    const optionsA = portOptions(switchA, project.links, link.a.portName, link.id, project.customCatalogEntries)
+    const optionsB = portOptions(switchB, project.links, link.b.portName, link.id, project.customCatalogEntries)
 
     const tryUpdatePort = (side: 'a' | 'b', newPort: string) => {
       if (!switchA || !switchB) return
       const portA = side === 'a' ? newPort : link.a.portName
       const portB = side === 'b' ? newPort : link.b.portName
-      const check = checkConnectPorts(switchA, portA, switchB, portB, project.links, link.id)
+      const check = checkConnectPorts(switchA, portA, switchB, portB, project.links, link.id, project.customCatalogEntries)
       if (!check.ok) {
         window.alert(check.reason)
         return

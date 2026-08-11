@@ -24,7 +24,12 @@ function inferRole(label: string, entry: SwitchCatalogEntry | undefined): Switch
   for (const [pattern, role] of ROLE_KEYWORDS) {
     if (pattern.test(label)) return role
   }
-  return entry?.suitableRoles[0] ?? 'standalone'
+  // A genuinely unidentified device (no catalog match, no role keyword) defaults
+  // to 'access' rather than 'standalone' — 'standalone' gets the full EVPN/VXLAN
+  // fabric recipe in this tool's CLI generator, which would fabricate plausible-
+  // looking but meaningless config for hardware we know nothing about. 'access'
+  // only generates hostname/mgmt/trunk-uplink config — the safe default.
+  return entry?.suitableRoles[0] ?? 'access'
 }
 
 /**
@@ -64,4 +69,62 @@ export function deriveDeviceName(label: string, entry: SwitchCatalogEntry | unde
     return true
   })
   return candidate?.slice(0, 40)
+}
+
+/**
+ * Strips the per-instance decorations this importer adds/encounters so
+ * shapes that are really the same real-world model (e.g. every "HPE ANW
+ * 2930M 48G PoE+ 1-slot Switch #N" in a diagram) collapse to one shared
+ * model name instead of one synthesized catalog entry per instance:
+ * the bracketed stencil SKU suffix (already tracked separately), and a
+ * trailing "#N" instance counter some diagrams number devices with.
+ */
+export function deriveModelName(label: string): string {
+  return label
+    .replace(/\s*\[[^\]]+\]\s*$/, '')
+    .replace(/\s*#\d+\s*$/, '')
+    .trim()
+}
+
+function slugify(text: string): string {
+  const slug = text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+  return slug || 'device'
+}
+
+/** Best-effort port count guess from patterns like "48G"/"24-port" in the label — falls back to a generic 24-port pool when nothing matches. */
+function guessPortCount(text: string): number {
+  const match = text.match(/\b(\d{1,3})\s*G(?:E)?\b/i) ?? text.match(/\b(\d{1,3})[- ]?port/i)
+  const n = match ? Number(match[1]) : NaN
+  return Number.isFinite(n) && n > 0 && n <= 96 ? n : 24
+}
+
+/**
+ * Builds a project-local catalog entry for a device that doesn't match the
+ * shipped, verified AOS-CX catalog — e.g. a different Aruba product line
+ * (ArubaOS-Switch, not AOS-CX) or a third-party switch referenced in an
+ * imported diagram. Port count is a rough guess from the label text; the
+ * entry is flagged `custom: true` throughout the UI so it's never mistaken
+ * for a verified spec.
+ */
+export function synthesizeCatalogEntry(modelName: string, sku: string | undefined, role: SwitchRole): SwitchCatalogEntry {
+  const cleanModel = deriveModelName(modelName) || sku || 'Unknown device'
+  const id = `custom-${slugify(sku ?? cleanModel)}`
+  const displayModel = sku && !cleanModel.toUpperCase().includes(sku.toUpperCase()) ? `${cleanModel} [${sku}]` : cleanModel
+  return {
+    id,
+    vendor: 'Custom',
+    series: 'Custom',
+    model: displayModel,
+    suitableRoles: [role],
+    portGroups: [{ count: guessPortCount(modelName), speedGbps: 1, namePrefix: '1/1/', startIndex: 1 }],
+    supportsVsx: false,
+    supportsEvpn: false,
+    custom: true,
+    notes:
+      'Auto-added from a Visio import for a model not in the shipped catalog. Port count/speed is a rough guess from the shape label — verify against the real datasheet before generating or trusting CLI for this switch.',
+  }
 }

@@ -14,8 +14,18 @@ export interface PortGroup {
 
 export interface SwitchCatalogEntry {
   id: string
-  vendor: 'Aruba'
-  series: 'CX 6200' | 'CX 6300' | 'CX 8100' | 'CX 8320' | 'CX 8325' | 'CX 8325H' | 'CX 8360' | 'CX 8400' | 'CX 9300'
+  vendor: 'Aruba' | 'Custom'
+  series:
+    | 'CX 6200'
+    | 'CX 6300'
+    | 'CX 8100'
+    | 'CX 8320'
+    | 'CX 8325'
+    | 'CX 8325H'
+    | 'CX 8360'
+    | 'CX 8400'
+    | 'CX 9300'
+    | 'Custom'
   model: string
   suitableRoles: SwitchRole[]
   portGroups: PortGroup[]
@@ -23,6 +33,8 @@ export interface SwitchCatalogEntry {
   supportsEvpn: boolean
   maxVlans?: number
   notes?: string
+  /** True for entries synthesized on the fly (e.g. from an unrecognized Visio shape) rather than the shipped, verified AOS-CX catalog — port layout is an unverified guess. */
+  custom?: boolean
 }
 
 // ---------- Placed instances on the canvas ----------
@@ -165,6 +177,8 @@ export interface Project {
   vlans: VlanMapping[]
   vrfs: TenantVrf[]
   hostConnections: HostConnection[]
+  /** Project-local catalog entries synthesized for devices that don't match the shipped catalog (e.g. from a Visio import) — not part of the verified, shipped AOS-CX catalog. */
+  customCatalogEntries: SwitchCatalogEntry[]
 }
 
 // ---------- Derived (NOT persisted — recomputed from Project) ----------

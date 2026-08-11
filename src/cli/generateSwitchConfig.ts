@@ -18,7 +18,7 @@ function pickRecipe(ctx: SwitchConfigContext): SectionBuilder[] {
 export function buildContext(switchId: string, project: Project, ipPlan: IpAllocationResult): SwitchConfigContext {
   const self = project.switches.find((s) => s.id === switchId)
   if (!self) throw new Error(`Unknown switch ${switchId}`)
-  const catalogEntry = getCatalogEntry(self.catalogId)
+  const catalogEntry = getCatalogEntry(self.catalogId, project.customCatalogEntries)
   if (!catalogEntry) throw new Error(`Unknown catalog entry ${self.catalogId}`)
 
   const peerLinks = project.links.filter(

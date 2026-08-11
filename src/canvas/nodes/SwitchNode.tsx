@@ -1,5 +1,6 @@
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react'
 import { getCatalogEntry } from '../../domain/catalog'
+import { useProjectStore } from '../../store/useProjectStore'
 import type { LinkKind, SwitchRole } from '../../domain/types'
 import { LINK_KIND_COLOR, ROLE_COLOR, SPEED_COLOR } from '../../ui/theme'
 
@@ -17,7 +18,8 @@ export type SwitchNodeType = Node<SwitchNodeData, 'switchNode'>
 const PORT_STATIC_STYLE = { position: 'static' as const, transform: 'none' }
 
 export function SwitchNode({ data, selected }: NodeProps<SwitchNodeType>) {
-  const entry = getCatalogEntry(data.catalogId)
+  const customCatalogEntries = useProjectStore((s) => s.project?.customCatalogEntries ?? [])
+  const entry = getCatalogEntry(data.catalogId, customCatalogEntries)
   const colors = ROLE_COLOR[data.role]
 
   return (
@@ -39,7 +41,14 @@ export function SwitchNode({ data, selected }: NodeProps<SwitchNodeType>) {
         )}
       </div>
 
-      <div className="px-3 py-1 text-[10px] opacity-70">{entry?.model ?? data.catalogId}</div>
+      <div className="px-3 py-1 text-[10px] opacity-70">
+        {entry?.model ?? data.catalogId}
+        {entry?.custom && (
+          <span className="ml-1 rounded-full bg-amber-500/20 px-1 py-px text-[8px] font-semibold uppercase tracking-wide text-amber-300">
+            unverified
+          </span>
+        )}
+      </div>
 
       <div className="flex flex-col gap-1.5 px-3 pb-3 pt-1">
         {entry?.portGroups.map((group, gi) => {

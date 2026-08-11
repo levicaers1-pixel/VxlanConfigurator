@@ -3,6 +3,38 @@ import { z } from 'zod'
 const switchRoleSchema = z.enum(['spine', 'leaf', 'border', 'access', 'standalone'])
 const linkKindSchema = z.enum(['underlay-p2p', 'vsx-isl', 'vsx-keepalive', 'mgmt', 'unassigned'])
 
+const portGroupSchema = z.object({
+  count: z.number(),
+  speedGbps: z.union([z.literal(1), z.literal(10), z.literal(25), z.literal(40), z.literal(100), z.literal(400)]),
+  namePrefix: z.string(),
+  startIndex: z.number(),
+})
+
+const switchCatalogEntrySchema = z.object({
+  id: z.string(),
+  vendor: z.enum(['Aruba', 'Custom']),
+  series: z.enum([
+    'CX 6200',
+    'CX 6300',
+    'CX 8100',
+    'CX 8320',
+    'CX 8325',
+    'CX 8325H',
+    'CX 8360',
+    'CX 8400',
+    'CX 9300',
+    'Custom',
+  ]),
+  model: z.string(),
+  suitableRoles: z.array(switchRoleSchema),
+  portGroups: z.array(portGroupSchema),
+  supportsVsx: z.boolean(),
+  supportsEvpn: z.boolean(),
+  maxVlans: z.number().optional(),
+  notes: z.string().optional(),
+  custom: z.boolean().optional(),
+})
+
 const switchInstanceSchema = z.object({
   id: z.string(),
   catalogId: z.string(),
@@ -105,6 +137,7 @@ export const projectSchema = z.object({
   vlans: z.array(vlanMappingSchema),
   vrfs: z.array(tenantVrfSchema),
   hostConnections: z.array(hostConnectionSchema).default([]),
+  customCatalogEntries: z.array(switchCatalogEntrySchema).default([]),
 })
 
 export type ProjectSchemaType = z.infer<typeof projectSchema>

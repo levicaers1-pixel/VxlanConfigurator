@@ -252,6 +252,12 @@ export const SWITCH_CATALOG: SwitchCatalogEntry[] = [
   },
 ]
 
-export function getCatalogEntry(id: string): SwitchCatalogEntry | undefined {
-  return SWITCH_CATALOG.find((c) => c.id === id)
+/** Looks up a catalog entry by id — the shipped, verified catalog first, then any project-local custom entries (e.g. synthesized from a Visio import). */
+export function getCatalogEntry(id: string, customEntries: SwitchCatalogEntry[] = []): SwitchCatalogEntry | undefined {
+  return SWITCH_CATALOG.find((c) => c.id === id) ?? customEntries.find((c) => c.id === id)
+}
+
+/** The full catalog available to a project: shipped entries plus any project-local custom ones. */
+export function allCatalogEntries(customEntries: SwitchCatalogEntry[] = []): SwitchCatalogEntry[] {
+  return [...SWITCH_CATALOG, ...customEntries]
 }

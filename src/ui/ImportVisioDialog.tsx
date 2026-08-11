@@ -5,8 +5,8 @@ import { useProjectStore } from '../store/useProjectStore'
 import { SWITCH_CATALOG, getCatalogEntry } from '../domain/catalog'
 import { nextAvailablePort } from '../domain/ports'
 import { parseVsdxFile } from '../import/visio/parseVsdx'
-import { defaultCatalogIdForRole, deriveDeviceName, matchShapeToCatalog } from '../import/visio/matchCatalog'
-import type { SwitchRole } from '../domain/types'
+import { deriveDeviceName, deriveModelName, matchShapeToCatalog, synthesizeCatalogEntry } from '../import/visio/matchCatalog'
+import type { SwitchCatalogEntry, SwitchRole } from '../domain/types'
 import { Button, inputClass } from './primitives'
 
 const ROLES: SwitchRole[] = ['spine', 'leaf', 'border', 'access', 'standalone']
@@ -37,6 +37,8 @@ export function ImportVisioDialog({ trigger }: { trigger: React.ReactNode }) {
   const addSwitch = useProjectStore((s) => s.addSwitch)
   const updateSwitch = useProjectStore((s) => s.updateSwitch)
   const addLink = useProjectStore((s) => s.addLink)
+  const addCustomCatalogEntries = useProjectStore((s) => s.addCustomCatalogEntries)
+  const projectCustomEntries = useProjectStore((s) => s.project?.customCatalogEntries ?? [])
 
   const [open, setOpen] = useState(false)
   const [stage, setStage] = useState<Stage>('idle')
@@ -44,6 +46,7 @@ export function ImportVisioDialog({ trigger }: { trigger: React.ReactNode }) {
   const [truncated, setTruncated] = useState(false)
   const [shapes, setShapes] = useState<ReviewShape[]>([])
   const [connectors, setConnectors] = useState<ReviewConnector[]>([])
+  const [newCustomEntries, setNewCustomEntries] = useState<SwitchCatalogEntry[]>([])
   const [pageHeightIn, setPageHeightIn] = useState(8.5)
   const [summary, setSummary] = useState<string | null>(null)
 
@@ -53,6 +56,7 @@ export function ImportVisioDialog({ trigger }: { trigger: React.ReactNode }) {
     setTruncated(false)
     setShapes([])
     setConnectors([])
+    setNewCustomEntries([])
     setSummary(null)
   }
 
@@ -61,9 +65,28 @@ export function ImportVisioDialog({ trigger }: { trigger: React.ReactNode }) {
     try {
       const buffer = await file.arrayBuffer()
       const diagram = await parseVsdxFile(buffer)
+
+      // Unmatched shapes get a project-local catalog entry synthesized from
+      // their label — grouped by SKU (or, failing that, the cleaned model
+      // text) so every instance of the same real-world model shares ONE
+      // entry instead of collapsing into an arbitrary unrelated default or
+      // fragmenting into one entry per shape.
+      const synthesized = new Map<string, SwitchCatalogEntry>()
+
       const reviewShapes: ReviewShape[] = diagram.shapes.map((shape) => {
         const match = matchShapeToCatalog(shape.label)
-        const catalogId = match.entry?.id ?? defaultCatalogIdForRole(match.role) ?? SWITCH_CATALOG[0].id
+        let catalogId: string
+        if (match.entry) {
+          catalogId = match.entry.id
+        } else {
+          const groupKey = shape.sku ?? (deriveModelName(shape.label).toUpperCase() || shape.label)
+          let entry = synthesized.get(groupKey)
+          if (!entry) {
+            entry = synthesizeCatalogEntry(shape.label, shape.sku, match.role)
+            synthesized.set(groupKey, entry)
+          }
+          catalogId = entry.id
+        }
         const name = deriveDeviceName(shape.label, match.entry) ?? ''
         return {
           visioId: shape.id,
@@ -83,6 +106,7 @@ export function ImportVisioDialog({ trigger }: { trigger: React.ReactNode }) {
 
       setShapes(reviewShapes)
       setConnectors(reviewConnectors)
+      setNewCustomEntries([...synthesized.values()])
       setPageHeightIn(diagram.pageHeightIn)
       setTruncated(diagram.truncatedToFirstPage)
       setStage('review')
@@ -100,6 +124,11 @@ export function ImportVisioDialog({ trigger }: { trigger: React.ReactNode }) {
     const included = shapes.filter((s) => s.include)
     const idMap = new Map<string, string>()
     const usedPorts = new Map<string, Set<string>>()
+    // The review table lets the user reassign a shape to any built-in OR
+    // newly-synthesized entry, so port lookups must see both.
+    const lookupEntries = [...projectCustomEntries, ...newCustomEntries]
+
+    if (newCustomEntries.length > 0) addCustomCatalogEntries(newCustomEntries)
 
     for (const shape of included) {
       const xPx = shape.xIn * PX_PER_INCH
@@ -122,8 +151,8 @@ export function ImportVisioDialog({ trigger }: { trigger: React.ReactNode }) {
       }
       const aShape = included.find((s) => idMap.get(s.visioId) === aId)!
       const bShape = included.find((s) => idMap.get(s.visioId) === bId)!
-      const aEntry = getCatalogEntry(aShape.catalogId)
-      const bEntry = getCatalogEntry(bShape.catalogId)
+      const aEntry = getCatalogEntry(aShape.catalogId, lookupEntries)
+      const bEntry = getCatalogEntry(bShape.catalogId, lookupEntries)
       const aPort = aEntry && nextAvailablePort(aEntry, usedPorts.get(aId)!)
       const bPort = bEntry && nextAvailablePort(bEntry, usedPorts.get(bId)!)
       if (!aPort || !bPort) {
@@ -136,14 +165,19 @@ export function ImportVisioDialog({ trigger }: { trigger: React.ReactNode }) {
       linksCreated += 1
     }
 
+    const newEntriesUsed = newCustomEntries.filter((e) => included.some((s) => s.catalogId === e.id))
     setSummary(
       `Imported ${included.length} switch${included.length === 1 ? '' : 'es'} and ${linksCreated} link${linksCreated === 1 ? '' : 's'}.` +
         (linksSkipped > 0 ? ` ${linksSkipped} link${linksSkipped === 1 ? '' : 's'} skipped (excluded endpoint or switch out of ports).` : '') +
+        (newEntriesUsed.length > 0
+          ? ` Added ${newEntriesUsed.length} new catalog ${newEntriesUsed.length === 1 ? 'entry' : 'entries'} for models not in the shipped catalog — their port layout is a rough guess, verify before trusting generated CLI.`
+          : '') +
         ' Every imported link is set to "Unassigned" — set the real kind (underlay, VSX ISL, etc.) per link in the Inspector.',
     )
     setStage('idle')
     setShapes([])
     setConnectors([])
+    setNewCustomEntries([])
   }
 
   return (
@@ -239,11 +273,24 @@ export function ImportVisioDialog({ trigger }: { trigger: React.ReactNode }) {
                           )
                         }
                       >
-                        {SWITCH_CATALOG.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.model}
-                          </option>
-                        ))}
+                        <optgroup label="Shipped catalog">
+                          {SWITCH_CATALOG.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.model}
+                            </option>
+                          ))}
+                        </optgroup>
+                        {(projectCustomEntries.length > 0 || newCustomEntries.length > 0) && (
+                          <optgroup label="Custom (unverified)">
+                            {[...projectCustomEntries, ...newCustomEntries]
+                              .filter((c, i, arr) => arr.findIndex((x) => x.id === c.id) === i)
+                              .map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.model}
+                                </option>
+                              ))}
+                          </optgroup>
+                        )}
                       </select>
                       <select
                         className={`${inputClass} w-28 shrink-0`}

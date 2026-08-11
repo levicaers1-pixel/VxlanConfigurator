@@ -7,6 +7,7 @@ import type {
   LinkKind,
   Project,
   ProjectSettings,
+  SwitchCatalogEntry,
   SwitchInstance,
   SwitchRole,
   TenantVrf,
@@ -56,6 +57,7 @@ export function newProject(fabricMode: FabricMode): Project {
     vlans: [],
     vrfs: [],
     hostConnections: [],
+    customCatalogEntries: [],
   }
 }
 
@@ -98,6 +100,9 @@ interface ProjectStore {
   addHostConnection: (conn: Omit<HostConnection, 'id'>) => string
   updateHostConnection: (id: string, patch: Partial<HostConnection>) => void
   removeHostConnection: (id: string) => void
+
+  /** Merges in project-local catalog entries by id, skipping any already present (e.g. from a prior import). */
+  addCustomCatalogEntries: (entries: SwitchCatalogEntry[]) => void
 }
 
 function touch(project: Project): Project {
@@ -271,5 +276,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => {
         ...project,
         hostConnections: project.hostConnections.filter((h) => h.id !== id),
       })),
+
+    addCustomCatalogEntries: (entries) =>
+      mutate((project) => {
+        const existingIds = new Set(project.customCatalogEntries.map((e) => e.id))
+        const toAdd = entries.filter((e) => !existingIds.has(e.id))
+        if (toAdd.length === 0) return project
+        return { ...project, customCatalogEntries: [...project.customCatalogEntries, ...toAdd] }
+      }),
   }
 })

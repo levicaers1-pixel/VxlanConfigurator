@@ -60,6 +60,7 @@ function baseProject(overrides: Partial<Project> = {}): Project {
     vlans: [],
     vrfs: [],
     hostConnections: [],
+    customCatalogEntries: [],
     ...overrides,
   }
 }

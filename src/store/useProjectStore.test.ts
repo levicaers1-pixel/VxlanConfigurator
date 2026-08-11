@@ -1,5 +1,20 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { useProjectStore } from './useProjectStore'
+import type { SwitchCatalogEntry } from '../domain/types'
+
+function customEntry(id: string): SwitchCatalogEntry {
+  return {
+    id,
+    vendor: 'Custom',
+    series: 'Custom',
+    model: id,
+    suitableRoles: ['access'],
+    portGroups: [{ count: 24, speedGbps: 1, namePrefix: '1/1/', startIndex: 1 }],
+    supportsVsx: false,
+    supportsEvpn: false,
+    custom: true,
+  }
+}
 
 function reset() {
   useProjectStore.setState({ project: null, past: [], future: [] })
@@ -52,5 +67,26 @@ describe('useProjectStore — setVsxPair auto-tags the ISL link', () => {
 
     const project = useProjectStore.getState().project!
     expect(project.links.find((l) => l.id === linkId)?.kind).toBe('underlay-p2p')
+  })
+})
+
+describe('useProjectStore — addCustomCatalogEntries', () => {
+  beforeEach(reset)
+
+  it('adds new custom catalog entries to the project', () => {
+    useProjectStore.getState().startProject('evpn')
+    useProjectStore.getState().addCustomCatalogEntries([customEntry('custom-foo'), customEntry('custom-bar')])
+
+    const project = useProjectStore.getState().project!
+    expect(project.customCatalogEntries.map((e) => e.id)).toEqual(['custom-foo', 'custom-bar'])
+  })
+
+  it('skips entries whose id is already present, so importing the same file twice does not duplicate them', () => {
+    useProjectStore.getState().startProject('evpn')
+    useProjectStore.getState().addCustomCatalogEntries([customEntry('custom-foo')])
+    useProjectStore.getState().addCustomCatalogEntries([customEntry('custom-foo'), customEntry('custom-bar')])
+
+    const project = useProjectStore.getState().project!
+    expect(project.customCatalogEntries.map((e) => e.id)).toEqual(['custom-foo', 'custom-bar'])
   })
 })

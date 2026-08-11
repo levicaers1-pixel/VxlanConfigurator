@@ -63,6 +63,7 @@ function buildFixture(settingsOverrides: Partial<Project['settings']> = {}) {
     vlans,
     vrfs,
     hostConnections: [],
+    customCatalogEntries: [],
   }
   const ipPlan = computeIpPlan(project)
   return { project, ipPlan }
@@ -143,6 +144,7 @@ describe('generateSwitchConfig — access role', () => {
       vlans: [],
       vrfs: [],
       hostConnections: [],
+      customCatalogEntries: [],
     }
     const ipPlan = computeIpPlan(project)
     const config = generateSwitchConfig('access1', project, ipPlan)
@@ -170,6 +172,7 @@ describe('generateSwitchConfig — access role', () => {
       vlans: [],
       vrfs: [],
       hostConnections: [],
+      customCatalogEntries: [],
     }
     const ipPlan = computeIpPlan(project)
     expect(ipPlan.loopbacks.access1).toBeUndefined()

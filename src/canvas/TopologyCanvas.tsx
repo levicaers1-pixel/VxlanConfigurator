@@ -117,7 +117,7 @@ function CanvasInner() {
       const switchA = project.switches.find((s) => s.id === source)
       const switchB = project.switches.find((s) => s.id === target)
       if (!switchA || !switchB) return
-      const check = checkConnectPorts(switchA, sourceHandle, switchB, targetHandle, project.links)
+      const check = checkConnectPorts(switchA, sourceHandle, switchB, targetHandle, project.links, undefined, project.customCatalogEntries)
       if (!check.ok) {
         window.alert(check.reason)
         return
@@ -136,7 +136,15 @@ function CanvasInner() {
       const switchA = project.switches.find((s) => s.id === source)
       const switchB = project.switches.find((s) => s.id === target)
       if (!switchA || !switchB) return
-      const check = checkConnectPorts(switchA, sourceHandle, switchB, targetHandle, project.links, oldEdge.id)
+      const check = checkConnectPorts(
+        switchA,
+        sourceHandle,
+        switchB,
+        targetHandle,
+        project.links,
+        oldEdge.id,
+        project.customCatalogEntries,
+      )
       if (!check.ok) {
         window.alert(check.reason)
         return
