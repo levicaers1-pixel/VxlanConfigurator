@@ -2,19 +2,23 @@ import { useState } from 'react'
 import { PanelLeftClose, PanelLeftOpen, Server } from 'lucide-react'
 import { SWITCH_CATALOG } from '../domain/catalog'
 import { useProjectStore } from '../store/useProjectStore'
+import { useSelectionStore } from '../store/useSelectionStore'
 import type { SwitchCatalogEntry } from '../domain/types'
 import { SPEED_COLOR } from '../ui/theme'
 
 export const DRAG_MIME = 'application/vxlan-switch'
 
 function CatalogCard({ entry }: { entry: SwitchCatalogEntry }) {
+  const setDraggingCatalogId = useSelectionStore((s) => s.setDraggingCatalogId)
   return (
     <div
       draggable
       onDragStart={(e) => {
         e.dataTransfer.setData(DRAG_MIME, JSON.stringify({ catalogId: entry.id, role: entry.suitableRoles[0] }))
         e.dataTransfer.effectAllowed = 'move'
+        setDraggingCatalogId(entry.id)
       }}
+      onDragEnd={() => setDraggingCatalogId(null)}
       className="cursor-grab rounded-lg border border-slate-800 bg-slate-900/80 p-2.5 text-xs transition-colors hover:border-slate-600 hover:bg-slate-900 active:cursor-grabbing"
     >
       <div className="flex items-center justify-between">

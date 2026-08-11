@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -16,6 +16,7 @@ import {
   type EdgeMouseHandler,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import { getCatalogEntry } from '../domain/catalog'
 import { useProjectStore } from '../store/useProjectStore'
 import { useSelectionStore } from '../store/useSelectionStore'
 import { SwitchNode, type SwitchNodeType } from './nodes/SwitchNode'
@@ -58,7 +59,10 @@ function CanvasInner() {
   const selectedNodeId = useSelectionStore((s) => s.selectedNodeId)
   const selectedEdgeId = useSelectionStore((s) => s.selectedEdgeId)
   const fitViewRequestId = useSelectionStore((s) => s.fitViewRequestId)
+  const draggingCatalogId = useSelectionStore((s) => s.draggingCatalogId)
   const [snapEnabled, setSnapEnabled] = useState(false)
+  const [dragPreviewPos, setDragPreviewPos] = useState<{ x: number; y: number } | null>(null)
+  const canvasContainerRef = useRef<HTMLDivElement>(null)
   const [legendVisible, setLegendVisible] = useState(true)
 
   const nodes: SwitchNodeType[] = useMemo(
@@ -201,11 +205,25 @@ function CanvasInner() {
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
+    const rect = canvasContainerRef.current?.getBoundingClientRect()
+    if (rect) setDragPreviewPos({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+  }, [])
+
+  const onDragLeave = useCallback((e: React.DragEvent) => {
+    // Container-relative bounds check rather than trusting relatedTarget —
+    // dragleave fires (and bubbles oddly) whenever the pointer crosses any
+    // child element's edge, not just when it truly leaves the canvas.
+    const rect = canvasContainerRef.current?.getBoundingClientRect()
+    if (!rect) return
+    if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) {
+      setDragPreviewPos(null)
+    }
   }, [])
 
   const onDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault()
+      setDragPreviewPos(null)
       const raw = e.dataTransfer.getData(DRAG_MIME)
       if (!raw) return
       const { catalogId, role } = JSON.parse(raw) as { catalogId: string; role: SwitchRole }
@@ -215,10 +233,12 @@ function CanvasInner() {
     [addSwitch, screenToFlowPosition],
   )
 
+  const draggingEntry = draggingCatalogId ? getCatalogEntry(draggingCatalogId, project?.customCatalogEntries ?? []) : undefined
+
   return (
     <div className="flex h-full w-full">
       <Palette />
-      <div className="relative flex-1" onDragOver={onDragOver} onDrop={onDrop}>
+      <div ref={canvasContainerRef} className="relative flex-1" onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -257,6 +277,15 @@ function CanvasInner() {
             </Panel>
           )}
         </ReactFlow>
+        {dragPreviewPos && draggingEntry && (
+          <div
+            className="pointer-events-none absolute z-50 rounded-xl border-2 border-dashed border-sky-400/80 bg-sky-500/10 px-3 py-2 text-xs font-semibold text-sky-200 shadow-lg backdrop-blur-[1px]"
+            style={{ left: dragPreviewPos.x, top: dragPreviewPos.y, width: 168 }}
+          >
+            {draggingEntry.model}
+            <div className="mt-0.5 text-[10px] font-normal text-sky-300/70">drops here</div>
+          </div>
+        )}
         {(project?.switches.length ?? 0) === 0 && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="rounded-xl border border-dashed border-slate-700 bg-slate-950/60 px-6 py-5 text-center">
