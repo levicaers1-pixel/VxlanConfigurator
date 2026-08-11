@@ -12,6 +12,7 @@ import {
   type NodeChange,
   type OnConnect,
   type OnReconnect,
+  type OnNodeDrag,
   type NodeMouseHandler,
   type EdgeMouseHandler,
 } from '@xyflow/react'
@@ -26,7 +27,7 @@ import { checkConnectPorts } from './linkValidation'
 import { computeAutoLayout } from './autoLayout'
 import { CanvasToolbar } from './CanvasToolbar'
 import { Legend } from './Legend'
-import type { Link, LinkKind, SwitchRole } from '../domain/types'
+import type { Link, LinkKind, SwitchCatalogEntry, SwitchRole } from '../domain/types'
 
 const nodeTypes = { switchNode: SwitchNode }
 const edgeTypes = { linkEdge: LinkEdge }
@@ -62,6 +63,7 @@ function CanvasInner() {
   const draggingCatalogId = useSelectionStore((s) => s.draggingCatalogId)
   const [snapEnabled, setSnapEnabled] = useState(false)
   const [dragPreviewPos, setDragPreviewPos] = useState<{ x: number; y: number } | null>(null)
+  const [draggingNodeEntry, setDraggingNodeEntry] = useState<SwitchCatalogEntry | null>(null)
   const canvasContainerRef = useRef<HTMLDivElement>(null)
   const [legendVisible, setLegendVisible] = useState(true)
 
@@ -190,7 +192,7 @@ function CanvasInner() {
     }
   }, [project, updateSwitch])
 
-  const { screenToFlowPosition, fitView } = useReactFlow()
+  const { screenToFlowPosition, flowToScreenPosition, fitView } = useReactFlow()
 
   // Bulk operations (a Visio import in particular) can place nodes anywhere
   // on the canvas — well outside the current viewport — leaving the user
@@ -233,7 +235,37 @@ function CanvasInner() {
     [addSwitch, screenToFlowPosition],
   )
 
-  const draggingEntry = draggingCatalogId ? getCatalogEntry(draggingCatalogId, project?.customCatalogEntries ?? []) : undefined
+  // Repositioning an existing switch already shows the node itself moving
+  // live, but the exact landing spot (especially once "Snap" rounds it to
+  // the grid) isn't always obvious — show the same ghost, driven by
+  // react-flow's own node-drag position rather than the raw cursor so it
+  // reflects snapping.
+  const onNodeDragStart: OnNodeDrag<SwitchNodeType> = useCallback(
+    (_e, node) => {
+      setDraggingNodeEntry(getCatalogEntry(node.data.catalogId, project?.customCatalogEntries ?? []) ?? null)
+    },
+    [project?.customCatalogEntries],
+  )
+
+  const onNodeDrag: OnNodeDrag<SwitchNodeType> = useCallback(
+    (_e, node) => {
+      const rect = canvasContainerRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const screenPos = flowToScreenPosition({ x: node.position.x, y: node.position.y })
+      setDragPreviewPos({ x: screenPos.x - rect.left, y: screenPos.y - rect.top })
+    },
+    [flowToScreenPosition],
+  )
+
+  const onNodeDragStop = useCallback(() => {
+    setDragPreviewPos(null)
+    setDraggingNodeEntry(null)
+  }, [])
+
+  const draggingPaletteEntry = draggingCatalogId
+    ? getCatalogEntry(draggingCatalogId, project?.customCatalogEntries ?? [])
+    : undefined
+  const activeDragEntry = draggingPaletteEntry ?? draggingNodeEntry ?? undefined
 
   return (
     <div className="flex h-full w-full">
@@ -252,6 +284,9 @@ function CanvasInner() {
           onPaneClick={onPaneClick}
           onNodesDelete={onNodesDelete}
           onEdgesDelete={onEdgesDelete}
+          onNodeDragStart={onNodeDragStart}
+          onNodeDrag={onNodeDrag}
+          onNodeDragStop={onNodeDragStop}
           connectionMode={ConnectionMode.Loose}
           deleteKeyCode={['Backspace', 'Delete']}
           snapToGrid={snapEnabled}
@@ -277,12 +312,12 @@ function CanvasInner() {
             </Panel>
           )}
         </ReactFlow>
-        {dragPreviewPos && draggingEntry && (
+        {dragPreviewPos && activeDragEntry && (
           <div
             className="pointer-events-none absolute z-50 rounded-xl border-2 border-dashed border-sky-400/80 bg-sky-500/10 px-3 py-2 text-xs font-semibold text-sky-200 shadow-lg backdrop-blur-[1px]"
             style={{ left: dragPreviewPos.x, top: dragPreviewPos.y, width: 168 }}
           >
-            {draggingEntry.model}
+            {activeDragEntry.model}
             <div className="mt-0.5 text-[10px] font-normal text-sky-300/70">drops here</div>
           </div>
         )}
