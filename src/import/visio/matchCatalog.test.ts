@@ -3,6 +3,7 @@ import {
   defaultCatalogIdForRole,
   deriveDeviceName,
   deriveModelName,
+  looksLikeNetworkSwitch,
   matchShapeToCatalog,
   synthesizeCatalogEntry,
 } from './matchCatalog'
@@ -108,5 +109,28 @@ describe('synthesizeCatalogEntry', () => {
   it('falls back to a generic port count when nothing in the label hints at one', () => {
     const entry = synthesizeCatalogEntry('Some Mystery Switch', undefined, 'standalone')
     expect(entry.portGroups[0].count).toBe(24)
+  })
+})
+
+describe('looksLikeNetworkSwitch', () => {
+  it('defaults to included when the label says "switch"', () => {
+    expect(looksLikeNetworkSwitch('HPE ANW 6200F 24G CL4 PoE 4SFP+ 370W Switch', 'JL725B')).toBe(true)
+  })
+
+  it('defaults to excluded for optics/DAC accessories even with a stencil SKU', () => {
+    expect(looksLikeNetworkSwitch('DAC Plugin', 'J9283D')).toBe(false)
+    expect(looksLikeNetworkSwitch('HPE ANW 10G SFP+ LC SR 400m OM4 MMF C-class XCVR', 'S2P30A')).toBe(false)
+  })
+
+  it('defaults to excluded for a software license icon', () => {
+    expect(looksLikeNetworkSwitch('HPE ANW Central Cloud Licenses', 'R6U58AAE')).toBe(false)
+  })
+
+  it('defaults to excluded for a floor-plan room label with no stencil SKU', () => {
+    expect(looksLikeNetworkSwitch('Punt 6 - Frozen Server room/Machine Kamer', undefined)).toBe(false)
+  })
+
+  it('defaults to included for a stencil instance with no keyword either way — more likely real equipment than not', () => {
+    expect(looksLikeNetworkSwitch('Core-1', 'R9W92A')).toBe(true)
   })
 })

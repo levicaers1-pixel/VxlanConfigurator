@@ -32,6 +32,29 @@ function inferRole(label: string, entry: SwitchCatalogEntry | undefined): Switch
   return entry?.suitableRoles[0] ?? 'access'
 }
 
+const SWITCH_KEYWORD = /\bswitch(es)?\b/i
+// Real network diagrams commonly include non-switch shapes dropped from the
+// same stencil set: transceivers/DAC cables, room or rack labels, software
+// license icons. None of these are devices to configure, so they shouldn't
+// default to "include" alongside actual switches.
+const NON_SWITCH_KEYWORDS = /\b(transceiver|xcvr|dac|plugin|cable|licen[cs]e[sd]?|module|optic|patch\s*panel|rack|ups|pdu)\b/i
+
+/**
+ * Best-effort guess at whether a parsed shape is actually a network switch
+ * worth pre-checking in the import review, vs. an accessory (optics/DAC/
+ * license) or a floor-plan label that happens to sit alongside real switches
+ * in the same diagram. Never hides anything — the review list still shows
+ * every shape — this only decides the checkbox's starting state.
+ */
+export function looksLikeNetworkSwitch(label: string, sku: string | undefined): boolean {
+  if (SWITCH_KEYWORD.test(label)) return true
+  if (NON_SWITCH_KEYWORDS.test(label)) return false
+  // No keyword signal either way. A shape dropped from a product stencil
+  // (has a SKU) is far more likely to be real equipment than a hand-drawn
+  // box or floor-plan room label, which never carries a stencil SKU.
+  return !!sku
+}
+
 /**
  * Matches a Visio shape's text label against the switch catalog by looking
  * for a full model string as a substring (normalized to strip spaces/dashes)

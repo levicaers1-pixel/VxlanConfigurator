@@ -5,7 +5,13 @@ import { useProjectStore } from '../store/useProjectStore'
 import { SWITCH_CATALOG, getCatalogEntry } from '../domain/catalog'
 import { nextAvailablePort } from '../domain/ports'
 import { parseVsdxFile } from '../import/visio/parseVsdx'
-import { deriveDeviceName, deriveModelName, matchShapeToCatalog, synthesizeCatalogEntry } from '../import/visio/matchCatalog'
+import {
+  deriveDeviceName,
+  deriveModelName,
+  looksLikeNetworkSwitch,
+  matchShapeToCatalog,
+  synthesizeCatalogEntry,
+} from '../import/visio/matchCatalog'
 import type { SwitchCatalogEntry, SwitchRole } from '../domain/types'
 import { Button, inputClass } from './primitives'
 
@@ -93,7 +99,7 @@ export function ImportVisioDialog({ trigger }: { trigger: React.ReactNode }) {
           label: shape.label || '(unlabeled shape)',
           xIn: shape.xIn,
           yIn: shape.yIn,
-          include: true,
+          include: match.entry ? true : looksLikeNetworkSwitch(shape.label, shape.sku),
           catalogId,
           role: match.role,
           name,
@@ -221,7 +227,8 @@ export function ImportVisioDialog({ trigger }: { trigger: React.ReactNode }) {
             <div className="flex flex-col gap-4">
               <p className="text-xs text-slate-500">
                 Best-effort extraction from shape labels — nothing is imported until you confirm below. Fix any
-                wrong model/role guesses, and uncheck anything that isn&apos;t really a switch or link.
+                wrong model/role guesses. Shapes that don&apos;t look like switches (room labels, optics/DAC cables,
+                license icons) start unchecked — review and re-check any the guess got wrong.
               </p>
               {truncated && (
                 <p className="rounded border border-amber-900 bg-amber-950/30 p-2 text-xs text-amber-200">
