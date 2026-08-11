@@ -22,13 +22,28 @@ function directTextLabel(shapeEl: Element): string {
 /** Falls back to the first non-empty label found on a descendant shape (grouped stencils often carry the visible text on a nested sub-shape). */
 function extractLabel(shapeEl: Element): string {
   const own = directTextLabel(shapeEl)
-  if (own) return own
+  if (own) return withMasterSku(own, shapeEl)
   const nested = Array.from(shapeEl.getElementsByTagName('Shape'))
   for (const child of nested) {
     const text = directTextLabel(child)
-    if (text) return text
+    if (text) return withMasterSku(text, shapeEl)
   }
-  return ''
+  return withMasterSku('', shapeEl)
+}
+
+/**
+ * Stencil instances (dragged from a master/SKU stencil, e.g. Aruba/HPE
+ * product shapes) carry the master's part number directly on the shape as
+ * `NameU`, separately from whatever text the user typed into the shape
+ * (often a room/rack label, not the model). Surface it so both the catalog
+ * matcher and the review UI have a shot at the real part number even when
+ * the visible text doesn't mention it.
+ */
+function withMasterSku(text: string, shapeEl: Element): string {
+  const sku = shapeEl.getAttribute('NameU')
+  if (!sku || sku === 'Dynamic connector') return text
+  if (!text) return sku
+  return text.toUpperCase().includes(sku.toUpperCase()) ? text : `${text} [${sku}]`
 }
 
 /** Visio stores PinX/PinY in inches by default, or in meters when the document uses metric page properties (rare but seen in some exports). */
@@ -48,9 +63,62 @@ function findPageXmlEntries(zip: JSZip): string[] {
     })
 }
 
+/**
+ * Visio's own page numbering (visio/pages/pages.xml, resolved through its
+ * .rels to actual page1.xml/page2.xml/... targets) is the only reliable way
+ * to find the real first foreground page — `page1.xml` is just a storage
+ * filename and is NOT guaranteed to be the diagram the user sees first. In
+ * particular, background/title-block pages (Background="1") are common and
+ * are not part of the diagram content at all. Falls back to naive filename
+ * sorting when pages.xml is missing or unparseable.
+ */
+async function selectContentPages(zip: JSZip): Promise<{ paths: string[]; multiple: boolean }> {
+  const naiveFallback = () => {
+    const entries = findPageXmlEntries(zip)
+    return { paths: entries, multiple: entries.length > 1 }
+  }
+
+  const pagesXmlFile = zip.file('visio/pages/pages.xml')
+  const relsFile = zip.file('visio/pages/_rels/pages.xml.rels')
+  if (!pagesXmlFile || !relsFile) return naiveFallback()
+
+  try {
+    const [pagesXmlText, relsXmlText] = await Promise.all([pagesXmlFile.async('string'), relsFile.async('string')])
+    const pagesDoc = new DOMParser().parseFromString(pagesXmlText, 'application/xml')
+    const relsDoc = new DOMParser().parseFromString(relsXmlText, 'application/xml')
+    if (pagesDoc.getElementsByTagName('parsererror').length > 0 || relsDoc.getElementsByTagName('parsererror').length > 0) {
+      return naiveFallback()
+    }
+
+    const relIdToTarget = new Map<string, string>()
+    for (const rel of Array.from(relsDoc.getElementsByTagName('Relationship'))) {
+      const id = rel.getAttribute('Id')
+      const target = rel.getAttribute('Target')
+      if (id && target) relIdToTarget.set(id, target)
+    }
+
+    const contentPagePaths: string[] = []
+    for (const pageEl of Array.from(pagesDoc.getElementsByTagName('Page'))) {
+      if (pageEl.getAttribute('Background') === '1') continue
+      const relEl = Array.from(pageEl.children).find((c) => c.tagName === 'Rel')
+      const relId =
+        relEl?.getAttribute('r:id') ??
+        relEl?.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id') ??
+        undefined
+      const target = relId ? relIdToTarget.get(relId) : undefined
+      if (target) contentPagePaths.push(`visio/pages/${target}`)
+    }
+
+    if (contentPagePaths.length === 0) return naiveFallback()
+    return { paths: contentPagePaths, multiple: contentPagePaths.length > 1 }
+  } catch {
+    return naiveFallback()
+  }
+}
+
 export async function parseVsdxFile(data: ArrayBuffer): Promise<ParsedDiagram> {
   const zip = await JSZip.loadAsync(data)
-  const pageEntries = findPageXmlEntries(zip)
+  const { paths: pageEntries, multiple } = await selectContentPages(zip)
   if (pageEntries.length === 0) {
     throw new Error('No page content found — this file doesn’t look like a valid .vsdx (Visio 2013+ XML format).')
   }
@@ -101,7 +169,12 @@ export async function parseVsdxFile(data: ArrayBuffer): Promise<ParsedDiagram> {
       connectors.push({ id: connectorId, fromShapeId: beginShapeId, toShapeId: endShapeId })
     }
   }
-  const connectorShapeIds = new Set(connectorEndpoints.keys())
+  // Only exclude shapes that resolved into a real two-endpoint connector.
+  // A shape can appear as FromSheet in <Connects> without being a network
+  // link — e.g. a device glued to another device for rack-stack alignment,
+  // which yields Begin/End cells pointing at the SAME shape and should stay
+  // a switch candidate rather than vanish as a bogus self-loop connector.
+  const connectorShapeIds = new Set(connectors.map((c) => c.id))
 
   const shapes: ParsedShape[] = []
   for (const shapeEl of topLevelShapes) {
@@ -113,5 +186,5 @@ export async function parseVsdxFile(data: ArrayBuffer): Promise<ParsedDiagram> {
     shapes.push({ id, label, xIn, yIn })
   }
 
-  return { shapes, connectors, pageWidthIn, pageHeightIn, truncatedToFirstPage: pageEntries.length > 1 }
+  return { shapes, connectors, pageWidthIn, pageHeightIn, truncatedToFirstPage: multiple }
 }
