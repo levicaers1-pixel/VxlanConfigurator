@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -57,6 +57,7 @@ function CanvasInner() {
   const selectEdge = useSelectionStore((s) => s.selectEdge)
   const selectedNodeId = useSelectionStore((s) => s.selectedNodeId)
   const selectedEdgeId = useSelectionStore((s) => s.selectedEdgeId)
+  const fitViewRequestId = useSelectionStore((s) => s.fitViewRequestId)
   const [snapEnabled, setSnapEnabled] = useState(false)
   const [legendVisible, setLegendVisible] = useState(true)
 
@@ -185,7 +186,17 @@ function CanvasInner() {
     }
   }, [project, updateSwitch])
 
-  const { screenToFlowPosition } = useReactFlow()
+  const { screenToFlowPosition, fitView } = useReactFlow()
+
+  // Bulk operations (a Visio import in particular) can place nodes anywhere
+  // on the canvas — well outside the current viewport — leaving the user
+  // stranded panning/zooming to find them. Re-fit once new nodes have had a
+  // chance to mount and register their measured size with react-flow.
+  useEffect(() => {
+    if (fitViewRequestId === 0) return
+    const id = window.setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50)
+    return () => window.clearTimeout(id)
+  }, [fitViewRequestId, fitView])
 
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()

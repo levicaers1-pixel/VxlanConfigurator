@@ -2,6 +2,7 @@ import { useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { AlertTriangle, X } from 'lucide-react'
 import { useProjectStore } from '../store/useProjectStore'
+import { useSelectionStore } from '../store/useSelectionStore'
 import { SWITCH_CATALOG, getCatalogEntry } from '../domain/catalog'
 import { nextAvailablePort } from '../domain/ports'
 import { parseVsdxFile } from '../import/visio/parseVsdx'
@@ -45,6 +46,7 @@ export function ImportVisioDialog({ trigger }: { trigger: React.ReactNode }) {
   const addLink = useProjectStore((s) => s.addLink)
   const addCustomCatalogEntries = useProjectStore((s) => s.addCustomCatalogEntries)
   const projectCustomEntries = useProjectStore((s) => s.project?.customCatalogEntries ?? [])
+  const requestFitView = useSelectionStore((s) => s.requestFitView)
 
   const [open, setOpen] = useState(false)
   const [stage, setStage] = useState<Stage>('idle')
@@ -184,6 +186,7 @@ export function ImportVisioDialog({ trigger }: { trigger: React.ReactNode }) {
     setShapes([])
     setConnectors([])
     setNewCustomEntries([])
+    if (included.length > 0) requestFitView()
   }
 
   return (
