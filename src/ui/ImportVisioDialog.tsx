@@ -18,6 +18,8 @@ import { Button, inputClass } from './primitives'
 
 const ROLES: SwitchRole[] = ['spine', 'leaf', 'border', 'access', 'standalone']
 const PX_PER_INCH = 110
+/** Rescale a diagram's bounding box down to roughly this many pixels on its longer side — keeps a floor-plan-scale Visio page from spreading switches tens of thousands of pixels apart. */
+const TARGET_SPAN_PX = 2200
 
 interface ReviewShape {
   visioId: string
@@ -55,7 +57,6 @@ export function ImportVisioDialog({ trigger }: { trigger: React.ReactNode }) {
   const [shapes, setShapes] = useState<ReviewShape[]>([])
   const [connectors, setConnectors] = useState<ReviewConnector[]>([])
   const [newCustomEntries, setNewCustomEntries] = useState<SwitchCatalogEntry[]>([])
-  const [pageHeightIn, setPageHeightIn] = useState(8.5)
   const [summary, setSummary] = useState<string | null>(null)
 
   function reset() {
@@ -115,7 +116,6 @@ export function ImportVisioDialog({ trigger }: { trigger: React.ReactNode }) {
       setShapes(reviewShapes)
       setConnectors(reviewConnectors)
       setNewCustomEntries([...synthesized.values()])
-      setPageHeightIn(diagram.pageHeightIn)
       setTruncated(diagram.truncatedToFirstPage)
       setStage('review')
     } catch (err) {
@@ -138,9 +138,24 @@ export function ImportVisioDialog({ trigger }: { trigger: React.ReactNode }) {
 
     if (newCustomEntries.length > 0) addCustomCatalogEntries(newCustomEntries)
 
+    // Diagrams drawn to real-world physical scale (a floor plan spanning
+    // hundreds of feet, not a schematic) would otherwise place switches tens
+    // of thousands of pixels apart at PX_PER_INCH. Rescale the included
+    // shapes' own bounding box down to a workable canvas span instead —
+    // this still preserves their relative layout, just not literal inches —
+    // while never blowing up an already-compact diagram beyond the normal feel.
+    const xs = included.map((s) => s.xIn)
+    const ys = included.map((s) => s.yIn)
+    const minX = Math.min(...xs)
+    const maxX = Math.max(...xs)
+    const minY = Math.min(...ys)
+    const maxY = Math.max(...ys)
+    const spanIn = Math.max(maxX - minX, maxY - minY, 1)
+    const scale = Math.min(TARGET_SPAN_PX / spanIn, PX_PER_INCH)
+
     for (const shape of included) {
-      const xPx = shape.xIn * PX_PER_INCH
-      const yPx = (pageHeightIn - shape.yIn) * PX_PER_INCH
+      const xPx = (shape.xIn - minX) * scale
+      const yPx = (maxY - shape.yIn) * scale
       const newId = addSwitch(shape.catalogId, shape.role, { x: xPx, y: yPx })
       idMap.set(shape.visioId, newId)
       usedPorts.set(newId, new Set())
