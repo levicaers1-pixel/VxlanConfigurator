@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react'
-import { FilePlus2, FolderUp, PackageOpen, Redo2, Save, Undo2 } from 'lucide-react'
+import { FilePlus2, FileInput, FolderUp, PackageOpen, Redo2, Save, Undo2 } from 'lucide-react'
 import { useProjectStore } from '../store/useProjectStore'
 import { exportProject } from '../persistence/exportProject'
 import { importProjectFile } from '../persistence/importProject'
 import { downloadConfigBundle } from '../cli/generateBundle'
 import type { IpAllocationResult } from '../domain/types'
 import { Button, IconButton } from './primitives'
+import { ImportVisioDialog } from './ImportVisioDialog'
 
 export function ProjectMenu({ ipPlan }: { ipPlan: IpAllocationResult | null }) {
   const project = useProjectStore((s) => s.project)
@@ -54,6 +55,13 @@ export function ProjectMenu({ ipPlan }: { ipPlan: IpAllocationResult | null }) {
           setError(null)
           loadProject(result.project)
         }}
+      />
+      <ImportVisioDialog
+        trigger={
+          <Button icon={<FileInput size={13} />}>
+            Import Visio
+          </Button>
+        }
       />
       <Button
         icon={<PackageOpen size={13} />}
