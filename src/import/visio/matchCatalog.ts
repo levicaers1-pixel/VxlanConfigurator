@@ -1,5 +1,5 @@
 import { SWITCH_CATALOG } from '../../domain/catalog'
-import type { SwitchCatalogEntry, SwitchRole } from '../../domain/types'
+import type { FabricMode, SwitchCatalogEntry, SwitchRole } from '../../domain/types'
 
 export interface CatalogMatch {
   /** Set only on a confident full-model-string match; otherwise the caller should prompt the user to pick one. */
@@ -20,16 +20,26 @@ function normalize(s: string): string {
   return s.toUpperCase().replace(/[^A-Z0-9]/g, '')
 }
 
-function inferRole(label: string, entry: SwitchCatalogEntry | undefined): SwitchRole {
+function inferRole(label: string, entry: SwitchCatalogEntry | undefined, fabricMode: FabricMode): SwitchRole {
   for (const [pattern, role] of ROLE_KEYWORDS) {
     if (pattern.test(label)) return role
   }
-  // A genuinely unidentified device (no catalog match, no role keyword) defaults
-  // to 'access' rather than 'standalone' — 'standalone' gets the full EVPN/VXLAN
-  // fabric recipe in this tool's CLI generator, which would fabricate plausible-
-  // looking but meaningless config for hardware we know nothing about. 'access'
-  // only generates hostname/mgmt/trunk-uplink config — the safe default.
-  return entry?.suitableRoles[0] ?? 'access'
+  if (entry) return entry.suitableRoles[0]
+  // A genuinely unidentified device (no catalog match, no role keyword) needs a
+  // safe fallback role, and "safe" means something different per fabric mode:
+  //
+  // In EVPN mode, any non-'access' role gets a full BGP EVPN fabric recipe
+  // (fabricated ASNs, route-targets, peering) — plausible-looking but
+  // meaningless for hardware we know nothing about, so default to 'access'
+  // (hostname/mgmt only) instead.
+  //
+  // In static-vxlan mode, EVERY non-'access' role gets the identical
+  // staticVxlan recipe, whose overlay is structurally derived from the
+  // topology (VLAN-to-VNI mapping, remote-VTEP peers from actual links) —
+  // nothing fabricated. Defaulting to 'access' there would just as silently
+  // strip the VXLAN/VNI config a real imported switch should have, so
+  // 'standalone' is the safe (and correct) default instead.
+  return fabricMode === 'static-vxlan' ? 'standalone' : 'access'
 }
 
 const SWITCH_KEYWORD = /\bswitch(es)?\b/i
@@ -61,7 +71,7 @@ export function looksLikeNetworkSwitch(label: string, sku: string | undefined): 
  * — conservative on purpose, since a wrong high-confidence guess is worse
  * than an honest "couldn't tell, please pick one" for a real fabric design.
  */
-export function matchShapeToCatalog(label: string): CatalogMatch {
+export function matchShapeToCatalog(label: string, fabricMode: FabricMode): CatalogMatch {
   const norm = normalize(label)
   let entry: SwitchCatalogEntry | undefined
   if (norm) {
@@ -70,7 +80,7 @@ export function matchShapeToCatalog(label: string): CatalogMatch {
       return modelNorm.length > 0 && norm.includes(modelNorm)
     })
   }
-  return { entry, role: inferRole(label, entry), confidence: entry ? 'high' : 'low' }
+  return { entry, role: inferRole(label, entry, fabricMode), confidence: entry ? 'high' : 'low' }
 }
 
 /** Best default catalog entry for a role when the label didn't match anything — first catalog entry that supports the role. */

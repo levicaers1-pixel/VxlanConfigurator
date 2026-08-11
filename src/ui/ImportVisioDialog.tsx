@@ -48,6 +48,7 @@ export function ImportVisioDialog({ trigger }: { trigger: React.ReactNode }) {
   const addLink = useProjectStore((s) => s.addLink)
   const addCustomCatalogEntries = useProjectStore((s) => s.addCustomCatalogEntries)
   const projectCustomEntries = useProjectStore((s) => s.project?.customCatalogEntries ?? [])
+  const fabricMode = useProjectStore((s) => s.project?.settings.fabricMode ?? 'evpn')
   const requestFitView = useSelectionStore((s) => s.requestFitView)
 
   const [open, setOpen] = useState(false)
@@ -83,7 +84,7 @@ export function ImportVisioDialog({ trigger }: { trigger: React.ReactNode }) {
       const synthesized = new Map<string, SwitchCatalogEntry>()
 
       const reviewShapes: ReviewShape[] = diagram.shapes.map((shape) => {
-        const match = matchShapeToCatalog(shape.label)
+        const match = matchShapeToCatalog(shape.label, fabricMode)
         let catalogId: string
         if (match.entry) {
           catalogId = match.entry.id
